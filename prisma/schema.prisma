@@ -1,0 +1,145 @@
+// ============================================================================
+// Belva-GEN Database Schema
+// ============================================================================
+// PostgreSQL via Prisma ORM. Replaces all in-memory Map<> state with durable
+// storage. Run `npx prisma migrate dev` after schema changes.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Agent Registry ──────────────────────────────────────────────────────────
+
+enum AgentStatusValue {
+  IDLE
+  BUSY
+  ERROR
+  OFFLINE
+}
+
+model Agent {
+  id              String           @id // e.g. "node-backend", "next-ux"
+  name            String
+  description     String
+  status          AgentStatusValue @default(IDLE)
+  currentTask     String?
+  capabilities    Json             // AgentCapability shape
+  ownedPaths      String[]
+  lastHeartbeat   DateTime         @default(now())
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  pipelineStages  PipelineStage[]
+  auditLogs       AuditLog[]
+
+  @@map("agents")
+}
+
+// ─── Pipeline (Epic Lifecycle) ───────────────────────────────────────────────
+
+enum PipelineStatus {
+  FUNNEL
+  REFINEMENT
+  APPROVED
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+model Pipeline {
+  id              String          @id @default(uuid())
+  epicKey         String          @unique // Jira ticket ref, e.g. "BELVA-042"
+  status          PipelineStatus  @default(FUNNEL)
+  revisionCount   Int             @default(0)
+  metadata        Json?           // Additional context
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  stages          PipelineStage[]
+  approvals       Approval[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id              String          @id @default(uuid())
+  pipelineId      String
+  name            String
+  status          String          @default("pending") // pending, in-progress, completed, failed
+  order           Int
+  agentId         String?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  pipeline        Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  agent           Agent?          @relation(fields: [agentId], references: [id])
+
+  @@map("pipeline_stages")
+}
+
+// ─── Approvals (HITL Governance) ─────────────────────────────────────────────
+
+enum ApprovalType {
+  CODE_REVIEW
+  DEPLOY
+  RISK
+  PLAN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model Approval {
+  id              String          @id @default(uuid())
+  pipelineId      String
+  type            ApprovalType
+  status          ApprovalStatus  @default(PENDING)
+  requestedBy     String          // Agent ID that requested
+  decidedBy       String?         // Human reviewer identity
+  reason          String?         // Reviewer comment
+  expiresAt       DateTime?
+  decidedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  pipeline        Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineId])
+  @@index([status])
+  @@map("approvals")
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id              String          @id @default(uuid())
+  action          String          // e.g. "agent.registered", "pipeline.transitioned"
+  entityType      String          // e.g. "agent", "pipeline", "approval"
+  entityId        String
+  agentId         String?
+  payload         Json?           // Event-specific data
+  createdAt       DateTime        @default(now())
+
+  // Relations
+  agent           Agent?          @relation(fields: [agentId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

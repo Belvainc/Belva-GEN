@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Belva-GEN
 
-## Getting Started
+Autonomous development framework that orchestrates AI agents via OpenClaw, with a Next.js dashboard for human-in-the-loop governance. Agents plan, build, and ship — humans approve, intervene, and steer.
 
-First, run the development server:
+## Prerequisites
+
+- Node.js 20+
+- Docker (for PostgreSQL and Redis)
+- npm
+
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install dependencies
+make setup
+
+# Start PostgreSQL + Redis
+make infra-up
+
+# Run database migrations
+make db-migrate
+
+# Copy environment config (defaults work for local dev)
+cp .env.example .env.local
+
+# Start the dev server
+make dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to see the dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Architecture
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Belva-GEN has two halves: a **Node.js backend** that orchestrates AI agents, and a **Next.js dashboard** where humans govern the pipeline.
 
-## Learn More
+```text
+Browser → Next.js Dashboard (React 19, Tailwind v4)
+              ↓
+         API Routes → Services → Providers
+              ↓              ↓           ↓
+         PostgreSQL    BullMQ Jobs    MCP Clients
+         (Prisma)     (Redis)        (Jira, Slack)
+```
 
-To learn more about Next.js, take a look at the following resources:
+**Backend** manages agent lifecycle, pipeline state, job queues, and external integrations. All state is persisted to PostgreSQL via Prisma. Redis handles caching, rate limiting, and BullMQ job storage.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Dashboard** shows four views: system overview, agent status, pipeline progress, and pending approvals. Server Components fetch data directly from services — no unnecessary API round-trips.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Key Directories
 
-## Deploy on Vercel
+```text
+src/
+  app/                  Next.js App Router (dashboard pages + API routes)
+  components/           Atomic design library (atoms → molecules → organisms)
+  server/
+    orchestrator/       OpenClaw engine, state machine
+    agents/             Agent registry, runner, message bus
+    mcp/                Jira + Slack MCP integrations
+    config/             Environment, logging, Redis, request context
+    db/                 Prisma client
+    queues/             BullMQ typed job queues
+    workers/            BullMQ job processors
+    lib/                Retry, circuit breaker, rate limiter, webhook auth
+  types/                Shared TypeScript types + Zod schemas
+prisma/                 Database schema and migrations
+e2e/                    Playwright E2E tests
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tech Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Layer | Technology |
+| ----- | ---------- |
+| Framework | Next.js 16 (App Router) |
+| UI | React 19, Tailwind CSS v4 |
+| Language | TypeScript 5 (strict, zero `any`) |
+| Database | PostgreSQL 16, Prisma ORM |
+| Cache / Queues | Redis 7, ioredis, BullMQ |
+| Logging | Pino (structured JSON) |
+| Validation | Zod |
+| Testing | Jest, Playwright |
+| Orchestration | OpenClaw |
+| MCP Integrations | Jira, Slack |
+
+## Development
+
+```bash
+make dev             # Start dev server
+make quality         # Lint + type-check (run before commits)
+make test-all        # Unit + E2E tests
+make test-coverage   # Jest with coverage report
+make status          # Project health overview
+```
+
+See `make help` for the full command menu, or `make <category>-help` for a specific category (dev, test, quality, setup, infra, clean).
+
+## Infrastructure
+
+Local development runs PostgreSQL and Redis via Docker Compose:
+
+```bash
+make infra-up        # Start containers
+make infra-down      # Stop containers
+make db-migrate      # Run Prisma migrations
+make db-studio       # Browse database in Prisma Studio
+make health          # Check service health endpoint
+```
+
+Production uses managed services (e.g., Neon/Supabase for PostgreSQL, Upstash for Redis).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, branch conventions, and commit message format.
+
+## License
+
+Proprietary. All rights reserved.

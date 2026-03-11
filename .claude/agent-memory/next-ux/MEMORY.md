@@ -1,0 +1,12 @@
+# Frontend Agent — Shared Memory
+
+Stable patterns, gotchas, and workarounds for the frontend agent's domain.
+
+<!-- Entry format:
+## [Topic Name]
+
+[1-3 sentences describing the pattern, gotcha, or workaround.]
+[Why it matters — what goes wrong if you don't know this.]
+
+Reference: `path/to/relevant/file.tsx`
+-->
