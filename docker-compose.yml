@@ -40,6 +40,29 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── OpenClaw (Optional) ─────────────────────────────────────────────────────
+  # Only starts when explicitly requested:
+  #   docker compose --profile openclaw up
+  openclaw:
+    image: openclaw/openclaw:latest
+    container_name: belva-openclaw
+    profiles:
+      - openclaw
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      OPENCLAW_PORT: 8080
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres-data:
   redis-data:

@@ -1,88 +1,105 @@
-"use client";
+import { Suspense, type ReactNode } from "react";
+import { headers } from "next/headers";
+import { prisma } from "@/server/db/client";
+import { ApprovalCard } from "@/components/organisms/ApprovalCard";
+import type { Approval } from "@prisma/client";
 
-import type { ReactNode } from "react";
-import { useState } from "react";
+// ─── Metadata ─────────────────────────────────────────────────────────────────
 
-interface ApprovalItem {
-  id: string;
-  ticketRef: string;
-  planSummary: string;
-  riskLevel: "low" | "medium" | "high";
-  agentAssignments: string[];
-  filesToChange: string[];
-  createdAt: string;
-}
+export const metadata = {
+  title: "Pending Approvals | Belva-GEN Dashboard",
+  description: "Review and approve implementation plans for tickets",
+};
 
-export default function ApprovalsPage(): ReactNode {
-  const [approvals] = useState<ApprovalItem[]>([]);
+// ─── Approval List (async data fetcher) ───────────────────────────────────────
+
+async function ApprovalList(): Promise<ReactNode> {
+  const approvals = await prisma.approval.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  // Resolve reviewer identity from request headers or fall back to "dashboard-user"
+  const headersList = await headers();
+  const reviewerIdentity =
+    headersList.get("x-user-identity") ?? "dashboard-user";
+
+  if (approvals.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-surface p-12 text-center">
+        <p className="text-text-muted">No pending approvals</p>
+        <p className="mt-2 text-sm text-text-muted">
+          Approvals will appear here when plans are ready for review.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Pending Approvals
-      </h2>
-
-      {approvals.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-12 text-center dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-gray-500 dark:text-gray-400">
-            No pending approvals
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {approvals.map((approval) => (
-            <div
-              key={approval.id}
-              className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {approval.ticketRef}
-                  </h3>
-                  <span
-                    className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      approval.riskLevel === "high"
-                        ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
-                        : approval.riskLevel === "medium"
-                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
-                          : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                    }`}
-                  >
-                    {approval.riskLevel} risk
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-                    aria-label={`Approve plan for ${approval.ticketRef}`}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md bg-yellow-600 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-700"
-                    aria-label={`Request changes for ${approval.ticketRef}`}
-                  >
-                    Request Changes
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-                    aria-label={`Reject plan for ${approval.ticketRef}`}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {approval.planSummary}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="space-y-6">
+      {approvals.map((approval: Approval) => (
+        <ApprovalCard
+          key={approval.id}
+          approval={approval}
+          reviewerIdentity={reviewerIdentity}
+        />
+      ))}
     </div>
+  );
+}
+
+// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+
+function ApprovalListSkeleton(): ReactNode {
+  return (
+    <div className="space-y-6" aria-busy="true" role="status" aria-label="Loading approvals">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-lg border border-border bg-surface-elevated p-6"
+        >
+          {/* Header skeleton */}
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <div className="h-6 w-40 rounded bg-surface" />
+              <div className="mt-2 h-5 w-24 rounded-full bg-surface" />
+            </div>
+            <div className="h-4 w-32 rounded bg-surface" />
+          </div>
+          {/* Content skeleton */}
+          <div className="mb-4 h-32 rounded bg-surface" />
+          {/* Buttons skeleton */}
+          <div className="flex gap-3">
+            <div className="h-10 w-24 rounded bg-surface" />
+            <div className="h-10 w-36 rounded bg-surface" />
+            <div className="h-10 w-20 rounded bg-surface" />
+          </div>
+        </div>
+      ))}
+      <span className="sr-only">Loading pending approvals</span>
+    </div>
+  );
+}
+
+// ─── Page Component ───────────────────────────────────────────────────────────
+
+export default function ApprovalsPage(): ReactNode {
+  return (
+    <main className="container mx-auto max-w-4xl py-8">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold text-text-primary">
+          Pending Approvals
+        </h1>
+        <p className="mt-2 text-text-secondary">
+          Review implementation plans before agent execution begins.
+          All approvals require explicit human decision — no auto-approval.
+        </p>
+      </header>
+
+      <Suspense fallback={<ApprovalListSkeleton />}>
+        <ApprovalList />
+      </Suspense>
+    </main>
   );
 }

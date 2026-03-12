@@ -20,15 +20,15 @@ const envSchema = z.object({
     .string()
     .default("redis://localhost:6379"),
 
-  // Jira MCP (optional — stubs used when absent)
+  // Jira integration (optional — stubs used when absent)
   JIRA_BASE_URL: z.string().url().optional(),
+  JIRA_USER_EMAIL: z.string().email().optional(),
   JIRA_API_TOKEN: z.string().optional(),
   JIRA_PROJECT_KEY: z.string().default("BELVA"),
 
-  // Slack MCP (optional — stubs used when absent)
-  SLACK_BOT_TOKEN: z.string().optional(),
-  SLACK_APPROVAL_CHANNEL: z.string().default("#belva-approvals"),
-  SLACK_NOTIFICATION_CHANNEL: z.string().default("#belva-notifications"),
+  // Slack Notifications (optional — stubs used when absent)
+  // Use Incoming Webhook URL, not Bot Token
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
 
   // Webhook security
   WEBHOOK_SECRET: z
@@ -47,6 +47,33 @@ const envSchema = z.object({
   // OpenTelemetry (optional)
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().default("belva-gen"),
+
+  // Agent execution
+  AGENT_EXECUTOR: z
+    .enum(["mock", "claude", "openclaw"])
+    .default("mock"),
+
+  // Anthropic LLM (optional — stubs used when absent)
+  // Used for task decomposition and agent execution
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-20250514"),
+
+  // GitHub (for PR creation in Plans 09/10)
+  GITHUB_TOKEN: z.string().optional(),
+  GITHUB_REPO: z.string().optional(), // format: "owner/repo"
+
+  // OpenClaw (future)
+  OPENCLAW_ENDPOINT: z.string().url().optional(),
+  OPENCLAW_API_KEY: z.string().optional(),
+
+  // Human Approval Flow
+  // Dashboard URL for approval links in Slack notifications
+  DASHBOARD_URL: z.string().url().default("http://localhost:3000"),
+  // Comma-separated list of user identifiers allowed to approve plans
+  // In production, integrate with proper auth (NextAuth, etc.)
+  ALLOWED_APPROVERS: z.string().optional(),
+  // Slack channel for approval notifications
+  SLACK_APPROVAL_CHANNEL: z.string().default("#approvals"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -70,4 +97,22 @@ export function getEnv(): Env {
  */
 export function isDevelopment(): boolean {
   return process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Check if a user is allowed to approve plans.
+ * In development, all users are allowed if ALLOWED_APPROVERS is not set.
+ * In production, requires explicit configuration.
+ */
+export function isAllowedApprover(userId: string): boolean {
+  const env = getEnv();
+  const allowedList = env.ALLOWED_APPROVERS;
+
+  // In development, allow all if not configured
+  if (allowedList === undefined) {
+    return isDevelopment();
+  }
+
+  const approvers = allowedList.split(",").map((s) => s.trim().toLowerCase());
+  return approvers.includes(userId.toLowerCase());
 }

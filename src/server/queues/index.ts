@@ -13,6 +13,7 @@ export const QUEUE_NAMES = {
   WEBHOOK_PROCESSING: "webhook-processing",
   AGENT_TASKS: "agent-tasks",
   NOTIFICATIONS: "notifications",
+  EXPIRATION_CHECKS: "expiration-checks",
 } as const;
 
 // ─── Job Data Schemas ────────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ export const WebhookJobDataSchema = z.object({
 export type WebhookJobData = z.infer<typeof WebhookJobDataSchema>;
 
 export const AgentTaskJobDataSchema = z.object({
-  taskType: z.enum(["backend", "frontend", "testing", "orchestration"]),
+  taskType: z.enum(["backend", "frontend", "testing", "documentation", "orchestration"]),
   targetAgent: z.string().min(1),
   ticketRef: z.string().min(1),
   description: z.string().min(1),
@@ -34,13 +35,35 @@ export const AgentTaskJobDataSchema = z.object({
 });
 export type AgentTaskJobData = z.infer<typeof AgentTaskJobDataSchema>;
 
-export const NotificationJobDataSchema = z.object({
-  channel: z.string().min(1),
-  message: z.string().min(1),
-  ticketRef: z.string().optional(),
-  urgency: z.enum(["low", "normal", "high"]).default("normal"),
+// ─── Notification Job Data (Slack) ───────────────────────────────────────────
+
+const ApprovalRequestNotificationSchema = z.object({
+  type: z.literal("approval_request"),
+  ticketRef: z.string().min(1),
+  title: z.string().min(1),
+  riskLevel: z.enum(["low", "medium", "high"]),
+  dashboardUrl: z.string().url(),
 });
+
+const StatusUpdateNotificationSchema = z.object({
+  type: z.literal("status_update"),
+  ticketRef: z.string().min(1),
+  status: z.enum(["approved", "rejected", "completed", "failed"]),
+  message: z.string().min(1),
+});
+
+export const NotificationJobDataSchema = z.discriminatedUnion("type", [
+  ApprovalRequestNotificationSchema,
+  StatusUpdateNotificationSchema,
+]);
 export type NotificationJobData = z.infer<typeof NotificationJobDataSchema>;
+
+// ─── Expiration Check Job Data ───────────────────────────────────────────────
+
+export const ExpirationCheckJobDataSchema = z.object({
+  triggeredAt: z.string().datetime(),
+});
+export type ExpirationCheckJobData = z.infer<typeof ExpirationCheckJobDataSchema>;
 
 // ─── Default Job Options ─────────────────────────────────────────────────────
 
@@ -92,6 +115,17 @@ export const notificationQueue = new Queue<NotificationJobData>(
   }
 );
 
+export const expirationQueue = new Queue<ExpirationCheckJobData>(
+  QUEUE_NAMES.EXPIRATION_CHECKS,
+  {
+    connection: { url: getConnectionUrl() },
+    defaultJobOptions: {
+      ...DEFAULT_JOB_OPTIONS,
+      attempts: 1, // Don't retry if it fails - will run again on next schedule
+    },
+  }
+);
+
 /**
  * Close all queue connections. Called during shutdown.
  */
@@ -100,5 +134,50 @@ export async function closeQueues(): Promise<void> {
     webhookQueue.close(),
     agentTaskQueue.close(),
     notificationQueue.close(),
+    expirationQueue.close(),
   ]);
+}
+
+// ─── Repeatable Jobs ─────────────────────────────────────────────────────────
+
+/** Expiration check interval (1 hour in milliseconds) */
+const EXPIRATION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Start the expiration check repeatable job.
+ * Should be called once at server startup after workers are initialized.
+ */
+export async function startExpirationChecker(): Promise<void> {
+  // Remove any existing repeatable job to avoid duplicates
+  const existingJobs = await expirationQueue.getRepeatableJobs();
+  for (const job of existingJobs) {
+    if (job.name === "check-expirations") {
+      await expirationQueue.removeRepeatableByKey(job.key);
+    }
+  }
+
+  // Add new repeatable job
+  await expirationQueue.add(
+    "check-expirations",
+    { triggeredAt: new Date().toISOString() },
+    {
+      repeat: {
+        every: EXPIRATION_CHECK_INTERVAL_MS,
+      },
+      jobId: "expiration-checker-repeatable",
+    }
+  );
+}
+
+/**
+ * Stop the expiration check repeatable job.
+ * Call during shutdown to clean up.
+ */
+export async function stopExpirationChecker(): Promise<void> {
+  const existingJobs = await expirationQueue.getRepeatableJobs();
+  for (const job of existingJobs) {
+    if (job.name === "check-expirations") {
+      await expirationQueue.removeRepeatableByKey(job.key);
+    }
+  }
 }

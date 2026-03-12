@@ -12,9 +12,21 @@
   --status-idle: #10b981;
   --status-busy: #f59e0b;
   --status-error: #ef4444;
+  --status-success: #10b981;
+  --status-warning: #f59e0b;
+  --status-info: #3b82f6;
   --risk-low: #10b981;
   --risk-medium: #f59e0b;
   --risk-high: #ef4444;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e7eb;
+  --secondary-foreground: #1f2937;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #eff6ff;
+  --accent-foreground: #1e40af;
+  --ring: #3b82f6;
 }
 
 @theme inline {
@@ -29,9 +41,21 @@
   --color-status-idle: var(--status-idle);
   --color-status-busy: var(--status-busy);
   --color-status-error: var(--status-error);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-info: var(--status-info);
   --color-risk-low: var(--risk-low);
   --color-risk-medium: var(--risk-medium);
   --color-risk-high: var(--risk-high);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -49,9 +73,21 @@
     --status-idle: #34d399;
     --status-busy: #fbbf24;
     --status-error: #f87171;
+    --status-success: #34d399;
+    --status-warning: #fbbf24;
+    --status-info: #60a5fa;
     --risk-low: #34d399;
     --risk-medium: #fbbf24;
     --risk-high: #f87171;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --secondary: #374151;
+    --secondary-foreground: #f9fafb;
+    --muted: #262626;
+    --muted-foreground: #9ca3af;
+    --accent: #1e3a5f;
+    --accent-foreground: #93c5fd;
+    --ring: #60a5fa;
   }
 }
 

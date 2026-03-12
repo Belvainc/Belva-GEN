@@ -1,13 +1,17 @@
 import type { TaskAssignment, TaskCompletion } from "@/types/agent-protocol";
 import type { AgentRegistry } from "./registry";
 import type { MessageBus } from "./message-bus";
+import { getExecutor } from "./execution";
+import { composeSystemPrompt } from "./execution/prompt-composer";
+import type { ExecutionRequest } from "./execution/types";
 import { createAgentLogger } from "@/lib/logger";
 
 const logger = createAgentLogger("orchestrator-project");
 
 /**
  * Agent runner that manages task execution lifecycle.
- * Receives task assignments, dispatches to agents, and reports completions.
+ * Receives task assignments, dispatches to agents via the configured
+ * AgentExecutor, and reports completions back to the MessageBus.
  */
 export class AgentRunner {
   constructor(
@@ -30,7 +34,7 @@ export class AgentRunner {
   }
 
   /**
-   * Execute a task assignment by delegating to the target agent.
+   * Execute a task assignment by delegating to the configured AgentExecutor.
    */
   private async executeTask(assignment: TaskAssignment): Promise<void> {
     const { targetAgent, taskType, ticketRef } = assignment;
@@ -59,8 +63,72 @@ export class AgentRunner {
       `Task ${assignment.id} assigned to ${targetAgent} for ${ticketRef}`
     );
 
-    // TODO: Implement actual agent execution via OpenClaw
-    // The agent will process the task and publish a TaskCompletion message
+    const executor = getExecutor();
+
+    try {
+      // Compose system prompt from agent definition + applicable rules
+      const systemPrompt = await composeSystemPrompt(
+        targetAgent,
+        agentConfig.ownedPaths
+      );
+
+      // Build execution request
+      const request: ExecutionRequest = {
+        taskId: assignment.id,
+        agentId: targetAgent,
+        taskType,
+        ticketRef,
+        description: assignment.description,
+        constraints: assignment.constraints,
+        acceptanceCriteria: assignment.acceptanceCriteria,
+        domainPaths: agentConfig.ownedPaths,
+        systemPrompt,
+        timeoutMs: 600_000,
+      };
+
+      // Execute via the configured executor (mock, claude, or openclaw)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), request.timeoutMs);
+
+      try {
+        const result = await executor.execute(request, controller.signal);
+
+        // Publish task completion
+        await this.messageBus.publish({
+          kind: "task-completion",
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          sourceAgent: targetAgent,
+          taskAssignmentId: assignment.id,
+          changedFiles: result.changedFiles,
+          testRequirements: result.testRequirements,
+          summary: result.summary,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      logger.error(`Task ${assignment.id} execution failed: ${errorMessage}`);
+
+      // Publish failure completion
+      await this.messageBus.publish({
+        kind: "task-completion",
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        sourceAgent: targetAgent,
+        taskAssignmentId: assignment.id,
+        changedFiles: [],
+        testRequirements: [],
+        summary: `Execution failed: ${errorMessage}`,
+      });
+    } finally {
+      // Always reset agent status
+      this.registry.updateStatus(targetAgent, {
+        status: "idle",
+        currentTask: null,
+      });
+    }
   }
 
   /**
@@ -79,6 +147,8 @@ export class AgentRunner {
       `Task ${taskAssignmentId} completed by ${sourceAgent}: ${summary}`
     );
 
-    // TODO: Trigger DoD validation via orchestrator engine
+    // DoD validation is triggered by the orchestrator engine when all tasks
+    // for an epic are complete (engine.onTaskCompleted → triggerDoDValidation).
+    // The engine subscribes to task-completion events on the same message bus.
   }
 }

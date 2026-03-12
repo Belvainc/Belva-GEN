@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/client";
 import { redis } from "@/server/config/redis";
+import { getExecutor } from "@/server/agents/execution";
 
 // ─── Health Check Types ──────────────────────────────────────────────────────
 
@@ -52,12 +53,32 @@ async function checkRedis(): Promise<HealthCheck> {
   }
 }
 
+async function checkExecutor(): Promise<HealthCheck> {
+  const start = Date.now();
+  try {
+    const executor = getExecutor();
+    const health = await executor.healthCheck();
+    return {
+      status: health.status === "unhealthy" ? "error" : "ok",
+      latencyMs: Date.now() - start,
+      ...(health.status === "disabled" ? { error: "disabled" } : {}),
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      latencyMs: Date.now() - start,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
 // ─── GET /api/health ─────────────────────────────────────────────────────────
 
 export async function GET(): Promise<NextResponse<HealthResponse>> {
-  const [database, redisCheck] = await Promise.allSettled([
+  const [database, redisCheck, executorCheck] = await Promise.allSettled([
     checkDatabase(),
     checkRedis(),
+    checkExecutor(),
   ]);
 
   const checks: Record<string, HealthCheck> = {
@@ -69,6 +90,10 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
       redisCheck.status === "fulfilled"
         ? redisCheck.value
         : { status: "error", error: String(redisCheck.reason) },
+    executor:
+      executorCheck.status === "fulfilled"
+        ? executorCheck.value
+        : { status: "error", error: String(executorCheck.reason) },
   };
 
   const allOk = Object.values(checks).every((c) => c.status === "ok");

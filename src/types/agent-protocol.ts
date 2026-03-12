@@ -16,6 +16,7 @@ export const TaskTypeSchema = z.enum([
   "backend",
   "frontend",
   "testing",
+  "documentation",
   "orchestration",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;

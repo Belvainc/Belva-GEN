@@ -65,8 +65,27 @@ model Pipeline {
   // Relations
   stages          PipelineStage[]
   approvals       Approval[]
+  decomposition   TaskDecomposition?
 
   @@map("pipelines")
+}
+
+// ─── Task Decomposition (LLM-generated task graph) ───────────────────────────
+
+model TaskDecomposition {
+  id              String          @id @default(uuid())
+  pipelineId      String          @unique
+  taskGraph       Json            // Serialized TaskGraph with nodes and dependencies
+  totalPoints     Int             // Sum of all task estimated points
+  riskAreas       String[]        // LLM-identified risk areas
+  affectedFiles   String[]        // Files expected to be modified
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  pipeline        Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@map("task_decompositions")
 }
 
 model PipelineStage {
@@ -115,6 +134,13 @@ model Approval {
   decidedAt       DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+
+  // Plan details (stored for audit and display)
+  planSummary     String?         @db.Text    // Human-readable plan description
+  planHash        String?         // SHA-256 of plan for integrity verification
+  affectedFiles   String[]        // List of files to be modified
+  estimatedPoints Int?            // Total story points estimate
+  riskLevel       String?         // 'low' | 'medium' | 'high'
 
   // Relations
   pipeline        Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)

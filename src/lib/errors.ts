@@ -49,3 +49,16 @@ export class AgentCommunicationError extends Error {
     this.name = "AgentCommunicationError";
   }
 }
+
+export class NotFoundError extends Error {
+  public readonly code = "NOT_FOUND" as const;
+
+  constructor(
+    message: string,
+    public readonly entityType?: string,
+    public readonly entityId?: string
+  ) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}

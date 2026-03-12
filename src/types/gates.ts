@@ -24,3 +24,53 @@ export const GateResultSchema = z.object({
   violations: z.array(GateViolationSchema),
 });
 export type GateResult = z.infer<typeof GateResultSchema>;
+
+// ─── Security Scan Results ────────────────────────────────────────────────────
+
+export const SecurityFindingSchema = z.object({
+  pattern: z.string().min(1),
+  file: z.string().min(1),
+  line: z.number().int().min(1).optional(),
+  severity: z.enum(["error", "warning"]),
+  message: z.string().min(1),
+});
+export type SecurityFinding = z.infer<typeof SecurityFindingSchema>;
+
+export const SecurityScanResultSchema = z.object({
+  status: z.enum(["clean", "flagged"]),
+  findings: z.array(SecurityFindingSchema),
+  scannedAt: z.string().datetime(),
+});
+export type SecurityScanResult = z.infer<typeof SecurityScanResultSchema>;
+
+// ─── Test Results ─────────────────────────────────────────────────────────────
+
+export const TestResultsSchema = z.object({
+  passCount: z.number().int().min(0),
+  failCount: z.number().int().min(0),
+  skipCount: z.number().int().min(0),
+  coveragePercent: z.number().min(0).max(100),
+  durationMs: z.number().int().min(0),
+});
+export type TestResults = z.infer<typeof TestResultsSchema>;
+
+// ─── Lint Results ─────────────────────────────────────────────────────────────
+
+export const LintResultsSchema = z.object({
+  errorCount: z.number().int().min(0),
+  warningCount: z.number().int().min(0),
+});
+export type LintResults = z.infer<typeof LintResultsSchema>;
+
+// ─── Changeset ────────────────────────────────────────────────────────────────
+
+export const ChangesetSchema = z.object({
+  ticketRef: z.string().min(1),
+  branchName: z.string().min(1),
+  changedFiles: z.array(z.string()),
+  testResults: TestResultsSchema.optional(),
+  lintResults: LintResultsSchema.optional(),
+  securityScan: SecurityScanResultSchema.optional(),
+  fileContents: z.record(z.string(), z.string()).optional(),
+});
+export type Changeset = z.infer<typeof ChangesetSchema>;

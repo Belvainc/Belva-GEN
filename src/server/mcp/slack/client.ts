@@ -1,59 +1,94 @@
-import type { SlackMessage, SlackApproval } from "./types";
-import { SlackApprovalSchema } from "./schemas";
-import { parseOrThrow } from "@/lib/validation";
-import { createAgentLogger } from "@/lib/logger";
+import type { SlackWebhookPayload } from "./types";
+import { SlackWebhookPayloadSchema } from "./schemas";
+import { createChildLogger } from "@/server/config/logger";
+import { withRetry } from "@/server/lib/retry";
 
-const logger = createAgentLogger("orchestrator-project");
+const logger = createChildLogger({ module: "slack-notification" });
 
-export interface SlackMCPClientConfig {
-  approvalChannel: string;
-  notificationChannel: string;
+export interface SlackNotificationClientConfig {
+  webhookUrl: string;
 }
 
 /**
- * Slack MCP client for sending approval requests and notifications.
- * All responses are validated with Zod schemas before returning.
+ * Slack notification client using Incoming Webhooks.
+ * Sends one-way notifications to a configured Slack channel.
+ * All payloads are validated with Zod before sending.
  */
-export class SlackMCPClient {
-  private readonly config: SlackMCPClientConfig;
+export class SlackNotificationClient {
+  private readonly webhookUrl: string;
 
-  constructor(config: SlackMCPClientConfig) {
-    this.config = config;
-    logger.info("Slack MCP client initialized", {
-      approvalChannel: config.approvalChannel,
-    });
+  constructor(config: SlackNotificationClientConfig) {
+    this.webhookUrl = config.webhookUrl;
+    logger.info("Slack notification client initialized (webhook mode)");
   }
 
   /**
-   * Send an approval request to the configured Slack channel.
+   * Send a notification to Slack via Incoming Webhook.
+   * Validates payload structure before sending.
+   * Includes retry logic for transient failures.
    */
-  async sendApprovalRequest(
-    ticketRef: string,
-    planSummary: string,
-    dashboardUrl: string
-  ): Promise<string> {
-    logger.info(`Sending approval request for ${ticketRef} to Slack`, {
-      planSummaryLength: planSummary.length,
-      dashboardUrl,
-    });
-    // TODO: Implement MCP protocol call to Slack
-    // Returns the message timestamp for tracking
-    throw new Error(`Not implemented: sendApprovalRequest(${ticketRef})`);
+  async send(
+    payload: SlackWebhookPayload,
+    signal?: AbortSignal
+  ): Promise<void> {
+    // Validate payload before sending
+    const validatedPayload = SlackWebhookPayloadSchema.parse(payload);
+
+    logger.debug(
+      { hasBlocks: validatedPayload.blocks !== undefined },
+      "Sending Slack notification"
+    );
+
+    await withRetry(
+      async () => {
+        signal?.throwIfAborted();
+
+        const response = await fetch(this.webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validatedPayload),
+          signal,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(
+            `Slack webhook failed: ${response.status} ${response.statusText} - ${text}`
+          );
+        }
+
+        logger.debug("Slack notification sent successfully");
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+        signal,
+      }
+    );
+  }
+}
+
+/**
+ * Stub client for development/testing when SLACK_WEBHOOK_URL is not configured.
+ * Logs messages instead of sending to Slack.
+ */
+export class SlackNotificationClientStub extends SlackNotificationClient {
+  constructor() {
+    // Pass a dummy URL since we won't use it
+    super({ webhookUrl: "https://hooks.slack.com/stub" });
+    logger.info("Slack notification client initialized (STUB mode - no webhook configured)");
   }
 
-  /**
-   * Send a notification message to the configured Slack channel.
-   */
-  async sendNotification(message: SlackMessage): Promise<void> {
-    logger.info(`Sending notification to ${message.channel}`);
-    // TODO: Implement MCP protocol call to Slack
-    throw new Error("Not implemented: sendNotification");
-  }
+  override async send(
+    payload: SlackWebhookPayload,
+    _signal?: AbortSignal
+  ): Promise<void> {
+    // Validate payload even in stub mode
+    SlackWebhookPayloadSchema.parse(payload);
 
-  /**
-   * Parse and validate an incoming Slack approval action.
-   */
-  parseApprovalAction(raw: unknown): SlackApproval {
-    return parseOrThrow(SlackApprovalSchema, raw);
+    logger.info(
+      { text: payload.text, blockCount: payload.blocks?.length ?? 0 },
+      "[STUB] Would send Slack notification"
+    );
   }
 }

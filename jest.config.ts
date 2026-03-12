@@ -16,6 +16,42 @@ const config: Config = {
       },
     ],
   },
+  // Use jsdom for component tests
+  projects: [
+    {
+      displayName: "server",
+      testEnvironment: "node",
+      testMatch: [
+        "<rootDir>/__tests__/**/*.test.ts",
+        "<rootDir>/src/server/**/*.test.ts",
+        "<rootDir>/src/lib/**/*.test.ts",
+      ],
+      moduleNameMapper: {
+        "^@/(.*)$": "<rootDir>/src/$1",
+      },
+      transform: {
+        "^.+\\.tsx?$": [
+          "ts-jest",
+          { tsconfig: "tsconfig.json" },
+        ],
+      },
+    },
+    {
+      displayName: "components",
+      testEnvironment: "jsdom",
+      testMatch: ["<rootDir>/src/components/**/*.test.tsx"],
+      moduleNameMapper: {
+        "^@/(.*)$": "<rootDir>/src/$1",
+      },
+      transform: {
+        "^.+\\.tsx?$": [
+          "ts-jest",
+          { tsconfig: "tsconfig.json" },
+        ],
+      },
+      setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+    },
+  ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "json-summary"],
   coverageThreshold: {
