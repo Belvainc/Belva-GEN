@@ -1,59 +1,85 @@
 import type { ReactNode } from "react";
-import { Suspense } from "react";
+import { headers } from "next/headers";
+import Link from "next/link";
 import { Text } from "@/components/atoms/Text";
-import { StatCard } from "@/components/molecules/StatCard";
-import { getServerContext } from "@/server/context";
-import { getAllAgentStatuses } from "@/server/services/agent.service";
-import { getAllEpics } from "@/server/services/pipeline.service";
 import { prisma } from "@/server/db/client";
 
-async function DashboardStats(): Promise<ReactNode> {
-  const context = getServerContext();
+/**
+ * Dashboard root — project selector.
+ * Shows the user's assigned projects. Admins see all projects.
+ */
+export default async function ProjectSelectorPage(): Promise<ReactNode> {
+  const headersList = await headers();
+  const userId = headersList.get("x-user-id") ?? "";
+  const userRole = headersList.get("x-user-role") ?? "USER";
 
-  // Fetch data in parallel
-  const [agentStatuses, epics, pendingApprovals] = await Promise.all([
-    getAllAgentStatuses({ registry: context.registry }),
-    Promise.resolve(getAllEpics({ engine: context.engine })),
-    prisma.approval.count({ where: { status: "PENDING" } }),
-  ]);
+  // Admins see all projects, users see only assigned ones
+  const projects =
+    userRole === "ADMIN"
+      ? await prisma.project.findMany({
+          orderBy: { name: "asc" },
+          include: { _count: { select: { users: true, pipelines: true } } },
+        })
+      : await prisma.project.findMany({
+          where: { users: { some: { userId } } },
+          orderBy: { name: "asc" },
+          include: { _count: { select: { users: true, pipelines: true } } },
+        });
 
-  const activeAgents = agentStatuses.filter((a) => a.status.status !== "offline").length;
-  const busyAgents = agentStatuses.filter((a) => a.status.status === "busy").length;
-  const activeEpics = epics.filter(
-    (e) => e.state === "in-progress" || e.state === "review"
-  ).length;
+  if (projects.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Text variant="h2" as="h2" className="mb-2">
+          No Projects
+        </Text>
+        <Text variant="muted">
+          {userRole === "ADMIN"
+            ? "Create a project in the admin panel to get started."
+            : "You haven't been assigned to any projects yet. Contact an admin."}
+        </Text>
+        {userRole === "ADMIN" && (
+          <Link
+            href="/admin/projects/new"
+            className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Create Project
+          </Link>
+        )}
+      </div>
+    );
+  }
 
-  return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-      <StatCard label="Active Epics" value={activeEpics} />
-      <StatCard label="Pending Approvals" value={pendingApprovals} />
-      <StatCard label="Agents Online" value={activeAgents} />
-      <StatCard label="Agents Busy" value={busyAgents} />
-    </div>
-  );
-}
-
-function StatsLoading(): ReactNode {
-  return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-      <StatCard label="Active Epics" value="" loading />
-      <StatCard label="Pending Approvals" value="" loading />
-      <StatCard label="Agents Online" value="" loading />
-      <StatCard label="Agents Busy" value="" loading />
-    </div>
-  );
-}
-
-export default function DashboardOverviewPage(): ReactNode {
   return (
     <div>
       <Text variant="h2" as="h2" className="mb-6">
-        Dashboard Overview
+        Your Projects
       </Text>
-      <Suspense fallback={<StatsLoading />}>
-        <DashboardStats />
-      </Suspense>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {projects.map((project) => (
+          <Link
+            key={project.id}
+            href={`/dashboard/${project.slug}`}
+            className="group rounded-xl border border-border bg-surface p-6 transition-colors hover:border-primary/50 hover:bg-surface-secondary"
+          >
+            <Text variant="h4" as="h3" className="mb-1">
+              {project.name}
+            </Text>
+            {project.description !== null && (
+              <Text variant="muted" className="mb-4 line-clamp-2">
+                {project.description}
+              </Text>
+            )}
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span>{project._count.users} members</span>
+              <span>{project._count.pipelines} pipelines</span>
+              {project.jiraProjectKey !== null && (
+                <span>Jira: {project.jiraProjectKey}</span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
-

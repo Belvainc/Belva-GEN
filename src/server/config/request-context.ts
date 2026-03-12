@@ -1,14 +1,19 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import type { UserRole } from "@/types/auth";
 
 // ─── Request Context ─────────────────────────────────────────────────────────
 // Per-request context using AsyncLocalStorage. Middleware sets this at the
-// start of each request; all downstream code can access requestId and timing
-// without passing it through every function call.
+// start of each request; all downstream code can access requestId, timing,
+// and authenticated user info without passing them through every function call.
 
 export interface RequestContext {
   readonly requestId: string;
   readonly startTime: number;
+  readonly userId?: string;
+  readonly userRole?: UserRole;
+  readonly sessionId?: string;
+  readonly projectId?: string;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();

@@ -20,10 +20,10 @@ async function ApprovalList(): Promise<ReactNode> {
     take: 50,
   });
 
-  // Resolve reviewer identity from request headers or fall back to "dashboard-user"
+  // Resolve reviewer identity from authenticated user (set by middleware)
   const headersList = await headers();
   const reviewerIdentity =
-    headersList.get("x-user-identity") ?? "dashboard-user";
+    headersList.get("x-user-id") ?? "dashboard-user";
 
   if (approvals.length === 0) {
     return (

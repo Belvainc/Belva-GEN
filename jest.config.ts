@@ -34,7 +34,14 @@ const config: Config = {
           "ts-jest",
           { tsconfig: "tsconfig.json" },
         ],
+        "^.+\\.js$": [
+          "ts-jest",
+          { tsconfig: "tsconfig.json" },
+        ],
       },
+      transformIgnorePatterns: [
+        "node_modules/(?!(jose)/)",
+      ],
     },
     {
       displayName: "components",

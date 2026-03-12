@@ -4,6 +4,9 @@
 # This Makefile is a menu system and developer guide. All non-trivial logic
 # lives in scripts/ — the Makefile only delegates.
 #
+# Infrastructure: Homebrew (PostgreSQL@15, Redis)
+# Matches belva-goat2 pattern. No Docker required for dev.
+#
 # Usage:
 #   make help          — Show all target categories
 #   make dev-help      — Development targets
@@ -20,6 +23,14 @@ SHELL := /bin/bash
 # ============================================================================
 
 SCRIPTS_DIR := scripts
+
+# Infrastructure
+PG_SERVICE    := postgresql@15
+REDIS_SERVICE := redis
+DB_NAME       := belva_gen_dev
+DB_USER       := james
+DB_HOST       := localhost
+DB_PORT       := 5432
 
 # ============================================================================
 # Section 1: Help
@@ -40,14 +51,16 @@ help: ## Show all available target categories
 	@echo "    make quality-help  Quality (lint, type-check)"
 	@echo "    make status-help   Status (project health)"
 	@echo "    make clean-help    Clean (artifacts, caches)"
-	@echo "    make infra-help    Infrastructure (database, redis, docker)"
+	@echo "    make infra-help    Infrastructure (database, redis)"
 	@echo "    make mcp-help      MCP integrations (future)"
 	@echo ""
 	@echo "  Quick start:"
 	@echo "    make setup         Install deps + verify environment"
+	@echo "    make infra-up      Start PostgreSQL + Redis (brew services)"
+	@echo "    make db-create     Create belva_gen_dev database"
+	@echo "    make db-migrate    Run Prisma migrations"
+	@echo "    make db-seed       Seed admin user"
 	@echo "    make dev           Start dev server"
-	@echo "    make quality       Lint + type-check"
-	@echo "    make test-all      Run all tests"
 	@echo ""
 
 # ============================================================================
@@ -156,6 +169,7 @@ setup-help: ## Show setup targets
 	@echo "    make install            Install npm dependencies"
 	@echo "    make verify-env         Verify Node, npm, TypeScript versions"
 	@echo "    make setup-playwright   Install Playwright browsers"
+	@echo "    make setup-env          Create .env.local from .env.example"
 	@echo ""
 
 .PHONY: setup
@@ -172,6 +186,16 @@ verify-env: ## Verify development environment
 .PHONY: setup-playwright
 setup-playwright: ## Install Playwright browsers
 	@bash $(SCRIPTS_DIR)/setup/install-playwright.sh
+
+.PHONY: setup-env
+setup-env: ## Create .env.local from .env.example (if not exists)
+	@if [ -f .env.local ]; then \
+		echo "  .env.local already exists — skipping"; \
+	else \
+		cp .env.example .env.local; \
+		echo "  Created .env.local from .env.example"; \
+		echo "  Review and update values as needed."; \
+	fi
 
 # ============================================================================
 # Section 6: Status
@@ -211,44 +235,154 @@ clean-hard: ## Clean everything including node_modules
 	@bash $(SCRIPTS_DIR)/clean/clean-all.sh --hard
 
 # ============================================================================
-# Section 8: Infrastructure
+# Section 8: Infrastructure (Homebrew)
+# ============================================================================
+# Uses Homebrew services for PostgreSQL@15 and Redis (same as belva-goat2).
+# Database: belva_gen_dev (separate from belva_goat_dev to avoid collision).
+# User: james (local macOS user, matches goat2 convention).
 # ============================================================================
 
 .PHONY: infra-help
 infra-help: ## Show infrastructure targets
 	@echo ""
-	@echo "  Infrastructure Targets"
-	@echo "  ======================"
-	@echo "    make infra-up      Start PostgreSQL + Redis (Docker Compose)"
-	@echo "    make infra-down    Stop infrastructure containers"
-	@echo "    make db-migrate    Run Prisma migrations"
-	@echo "    make db-studio     Open Prisma Studio (database browser)"
-	@echo "    make db-seed       Seed database with sample data"
-	@echo "    make health        Check service health endpoint"
+	@echo "  Infrastructure Targets (Homebrew)"
+	@echo "  =================================="
+	@echo ""
+	@echo "  Services:"
+	@echo "    make infra-up        Start PostgreSQL + Redis (brew services)"
+	@echo "    make infra-down      Stop PostgreSQL + Redis (brew services)"
+	@echo "    make infra-status    Check service status"
+	@echo ""
+	@echo "  Database:"
+	@echo "    make db-create       Create belva_gen_dev database"
+	@echo "    make db-drop         Drop belva_gen_dev database"
+	@echo "    make db-migrate      Run Prisma migrations"
+	@echo "    make db-seed         Seed admin user (admin@belva.dev)"
+	@echo "    make db-reset        Drop + create + migrate + seed"
+	@echo "    make db-studio       Open Prisma Studio (database browser)"
+	@echo ""
+	@echo "  Health:"
+	@echo "    make db-health       Check PostgreSQL + Redis connectivity"
+	@echo "    make health          Check service health endpoint"
 	@echo ""
 
+# ─── Service Management ─────────────────────────────────────────────────────
+
 .PHONY: infra-up
-infra-up: ## Start PostgreSQL + Redis via Docker Compose
-	docker compose up -d
+infra-up: ## Start PostgreSQL + Redis via Homebrew
+	@echo "Starting PostgreSQL@15..."
+	@brew services start $(PG_SERVICE) 2>/dev/null || true
+	@echo "Starting Redis..."
+	@brew services start $(REDIS_SERVICE) 2>/dev/null || true
+	@sleep 1
+	@$(MAKE) --no-print-directory infra-status
 
 .PHONY: infra-down
-infra-down: ## Stop infrastructure containers
-	docker compose down
+infra-down: ## Stop PostgreSQL + Redis via Homebrew
+	@echo "Stopping PostgreSQL@15..."
+	@brew services stop $(PG_SERVICE) 2>/dev/null || true
+	@echo "Stopping Redis..."
+	@brew services stop $(REDIS_SERVICE) 2>/dev/null || true
+	@echo "Services stopped."
+
+.PHONY: infra-status
+infra-status: ## Check PostgreSQL + Redis service status
+	@echo ""
+	@echo "  Service Status"
+	@echo "  =============="
+	@printf "  PostgreSQL@15:  "
+	@if pg_isready -h $(DB_HOST) -p $(DB_PORT) -q 2>/dev/null; then \
+		echo "✓ running (port $(DB_PORT))"; \
+	else \
+		echo "✗ not running"; \
+	fi
+	@printf "  Redis:          "
+	@if redis-cli ping 2>/dev/null | grep -q PONG; then \
+		echo "✓ running (port 6379)"; \
+	else \
+		echo "✗ not running"; \
+	fi
+	@printf "  Database:       "
+	@if psql -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) -d $(DB_NAME) -c "SELECT 1" >/dev/null 2>&1; then \
+		echo "✓ $(DB_NAME) exists"; \
+	else \
+		echo "✗ $(DB_NAME) not found (run: make db-create)"; \
+	fi
+	@echo ""
+
+# ─── Database Management ─────────────────────────────────────────────────────
+
+.PHONY: db-create
+db-create: ## Create belva_gen_dev database
+	@if psql -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) -lqt | cut -d \| -f 1 | grep -qw $(DB_NAME); then \
+		echo "  Database $(DB_NAME) already exists."; \
+	else \
+		createdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) $(DB_NAME); \
+		echo "  Created database: $(DB_NAME)"; \
+	fi
+
+.PHONY: db-drop
+db-drop: ## Drop belva_gen_dev database (with confirmation)
+	@echo "This will permanently delete the $(DB_NAME) database."
+	@read -p "  Type '$(DB_NAME)' to confirm: " confirm; \
+	if [ "$$confirm" = "$(DB_NAME)" ]; then \
+		dropdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) --if-exists $(DB_NAME); \
+		echo "  Dropped database: $(DB_NAME)"; \
+	else \
+		echo "  Aborted."; \
+	fi
 
 .PHONY: db-migrate
 db-migrate: ## Run Prisma migrations
 	npx prisma migrate dev
 
+.PHONY: db-seed
+db-seed: ## Seed admin user
+	npx prisma db seed
+
+.PHONY: db-reset
+db-reset: ## Drop + create + migrate + seed (full reset)
+	@echo "Resetting database $(DB_NAME)..."
+	@dropdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) --if-exists $(DB_NAME)
+	@createdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) $(DB_NAME)
+	@echo "  Database recreated."
+	npx prisma migrate dev
+	npx prisma db seed
+	@echo "  Database reset complete."
+
 .PHONY: db-studio
 db-studio: ## Open Prisma Studio
 	npx prisma studio
 
-.PHONY: db-seed
-db-seed: ## Seed database
-	npx prisma db seed
+# ─── Health Checks ───────────────────────────────────────────────────────────
+
+.PHONY: db-health
+db-health: ## Check PostgreSQL + Redis connectivity
+	@echo ""
+	@echo "  Database Health"
+	@echo "  ==============="
+	@printf "  PostgreSQL:  "
+	@if pg_isready -h $(DB_HOST) -p $(DB_PORT) -q 2>/dev/null; then \
+		echo "✓ accepting connections"; \
+	else \
+		echo "✗ not accepting connections (run: make infra-up)"; \
+	fi
+	@printf "  Redis:       "
+	@if redis-cli ping 2>/dev/null | grep -q PONG; then \
+		echo "✓ PONG"; \
+	else \
+		echo "✗ not responding (run: make infra-up)"; \
+	fi
+	@printf "  Database:    "
+	@if psql -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) -d $(DB_NAME) -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'" -t 2>/dev/null; then \
+		echo "tables in public schema"; \
+	else \
+		echo "✗ cannot connect to $(DB_NAME)"; \
+	fi
+	@echo ""
 
 .PHONY: health
-health: ## Check service health
+health: ## Check service health endpoint
 	@curl -s http://localhost:3000/api/health | python3 -m json.tool 2>/dev/null || echo "Service not running"
 
 # ============================================================================
@@ -270,17 +404,18 @@ mcp-status: ## Check MCP server connectivity
 	@bash $(SCRIPTS_DIR)/mcp/mcp-status.sh
 
 # ============================================================================
-# Section 10: Docker (Future)
+# Section 10: Docker (Optional — for CI/production)
 # ============================================================================
 
 .PHONY: docker-help
 docker-help: ## Show Docker targets
 	@echo ""
-	@echo "  Docker Targets (Future)"
-	@echo "  ======================="
+	@echo "  Docker Targets (CI/Production)"
+	@echo "  ==============================="
 	@echo "    make docker-build  Build container image"
 	@echo ""
-	@echo "  Not yet configured."
+	@echo "  Local dev uses Homebrew services (make infra-up)."
+	@echo "  Docker is for CI pipelines and production deployment."
 	@echo ""
 
 .PHONY: docker-build

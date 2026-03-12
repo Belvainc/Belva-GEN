@@ -13,7 +13,7 @@ const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .url()
-    .default("postgresql://belva:belva@localhost:5432/belva_dev"),
+    .default("postgresql://james@localhost:5432/belva_gen_dev"),
 
   // Redis
   REDIS_URL: z
@@ -66,11 +66,24 @@ const envSchema = z.object({
   OPENCLAW_ENDPOINT: z.string().url().optional(),
   OPENCLAW_API_KEY: z.string().optional(),
 
+  // Authentication
+  JWT_SECRET: z
+    .string()
+    .min(32)
+    .default("dev-jwt-secret-must-be-at-least-32-characters"),
+  ENCRYPTION_KEY: z
+    .string()
+    .length(64)
+    .default("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+
+  // Seed admin user (used by prisma/seed.ts)
+  SEED_ADMIN_EMAIL: z.string().email().default("admin@belva.dev"),
+  SEED_ADMIN_PASSWORD: z.string().min(8).default("admin-dev-password-change-me"),
+
   // Human Approval Flow
   // Dashboard URL for approval links in Slack notifications
   DASHBOARD_URL: z.string().url().default("http://localhost:3000"),
-  // Comma-separated list of user identifiers allowed to approve plans
-  // In production, integrate with proper auth (NextAuth, etc.)
+  // Deprecated: replaced by RBAC user roles. Kept for backward compatibility.
   ALLOWED_APPROVERS: z.string().optional(),
   // Slack channel for approval notifications
   SLACK_APPROVAL_CHANNEL: z.string().default("#approvals"),

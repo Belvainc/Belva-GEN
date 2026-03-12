@@ -177,7 +177,7 @@ async function processSlackWebhook(
     where: { id: pendingApproval.id },
     data: {
       status: prismaStatus,
-      decidedBy: userId,
+      decidedByLegacy: userId,
       decidedAt: new Date(),
       reason: comment ?? undefined,
     },

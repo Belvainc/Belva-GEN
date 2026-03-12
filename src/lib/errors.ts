@@ -62,3 +62,23 @@ export class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+export class AuthenticationError extends Error {
+  public readonly code = "AUTHENTICATION_ERROR" as const;
+  public readonly statusCode = 401;
+
+  constructor(message = "Authentication required") {
+    super(message);
+    this.name = "AuthenticationError";
+  }
+}
+
+export class AuthorizationError extends Error {
+  public readonly code = "AUTHORIZATION_ERROR" as const;
+  public readonly statusCode = 403;
+
+  constructor(message = "Insufficient permissions") {
+    super(message);
+    this.name = "AuthorizationError";
+  }
+}

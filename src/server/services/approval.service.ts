@@ -83,7 +83,7 @@ export async function approveRequest(
     where: { id: approvalId },
     data: {
       status: "APPROVED",
-      decidedBy: userId,
+      decidedById: userId,
       decidedAt: new Date(),
       reason: comment,
     },
@@ -123,7 +123,7 @@ export async function rejectRequest(
     where: { id: approvalId },
     data: {
       status: "REJECTED",
-      decidedBy: userId,
+      decidedById: userId,
       decidedAt: new Date(),
       reason,
     },

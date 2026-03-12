@@ -14,6 +14,107 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Users & Auth ──────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  passwordHash  String
+  name          String
+  role          UserRole     @default(USER)
+  status        UserStatus   @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  sessions      Session[]
+  projects      UserProject[]
+  approvals     Approval[]       @relation("ApprovalDecider")
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String
+  expiresAt     DateTime
+  lastActiveAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ─── Projects ──────────────────────────────────────────────────────────────────
+
+model Project {
+  id                  String   @id @default(uuid())
+  name                String
+  slug                String   @unique
+  description         String?
+  jiraBaseUrl         String?
+  jiraUserEmail       String?
+  jiraProjectKey      String?
+  confluenceSpaceKey  String?
+  githubRepo          String?  // "owner/repo" format
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  users               UserProject[]
+  credentials         ProjectCredential[]
+  pipelines           Pipeline[]
+  agents              Agent[]
+  auditLogs           AuditLog[]
+
+  @@map("projects")
+}
+
+model ProjectCredential {
+  id              String   @id @default(uuid())
+  projectId       String
+  key             String   // e.g. "jira_api_token", "github_token"
+  encryptedValue  String   // AES-256-GCM encrypted
+  iv              String   // Initialization vector (hex)
+  authTag         String   // GCM authentication tag (hex)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@map("project_credentials")
+}
+
+model UserProject {
+  userId      String
+  projectId   String
+  assignedAt  DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@map("user_projects")
+}
+
 // ─── Agent Registry ──────────────────────────────────────────────────────────
 
 enum AgentStatusValue {
@@ -32,10 +133,12 @@ model Agent {
   capabilities    Json             // AgentCapability shape
   ownedPaths      String[]
   lastHeartbeat   DateTime         @default(now())
+  projectId       String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
   // Relations
+  project         Project?         @relation(fields: [projectId], references: [id])
   pipelineStages  PipelineStage[]
   auditLogs       AuditLog[]
 
@@ -59,10 +162,12 @@ model Pipeline {
   status          PipelineStatus  @default(FUNNEL)
   revisionCount   Int             @default(0)
   metadata        Json?           // Additional context
+  projectId       String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   // Relations
+  project         Project?        @relation(fields: [projectId], references: [id])
   stages          PipelineStage[]
   approvals       Approval[]
   decomposition   TaskDecomposition?
@@ -128,7 +233,8 @@ model Approval {
   type            ApprovalType
   status          ApprovalStatus  @default(PENDING)
   requestedBy     String          // Agent ID that requested
-  decidedBy       String?         // Human reviewer identity
+  decidedById     String?         // FK to User who decided
+  decidedByLegacy String?         // Legacy: plain string identity (pre-auth migration)
   reason          String?         // Reviewer comment
   expiresAt       DateTime?
   decidedAt       DateTime?
@@ -144,6 +250,7 @@ model Approval {
 
   // Relations
   pipeline        Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  decidedByUser   User?           @relation("ApprovalDecider", fields: [decidedById], references: [id])
 
   @@index([pipelineId])
   @@index([status])
@@ -158,14 +265,19 @@ model AuditLog {
   entityType      String          // e.g. "agent", "pipeline", "approval"
   entityId        String
   agentId         String?
+  userId          String?         // User who performed the action (if human-initiated)
+  projectId       String?         // Project scope (if applicable)
   payload         Json?           // Event-specific data
   createdAt       DateTime        @default(now())
 
   // Relations
   agent           Agent?          @relation(fields: [agentId], references: [id])
+  user            User?           @relation(fields: [userId], references: [id])
+  project         Project?        @relation(fields: [projectId], references: [id])
 
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt])
+  @@index([userId])
   @@map("audit_logs")
 }

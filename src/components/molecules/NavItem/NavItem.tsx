@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import {
+  Shield,
+  Folder,
   Home,
   Bot,
   CheckCircle,
@@ -11,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/atoms/Badge";
 
-type IconName = "home" | "bot" | "check-circle" | "git-branch";
+type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder";
 
 interface NavItemProps {
   /** Navigation label */
@@ -31,6 +33,8 @@ const iconMap: Record<IconName, LucideIcon> = {
   bot: Bot,
   "check-circle": CheckCircle,
   "git-branch": GitBranch,
+  shield: Shield,
+  folder: Folder,
 } as const;
 
 /**
