@@ -6,6 +6,8 @@ Belva-GEN routes work through one of three pipelines based on ticket characteris
 
 Not all work needs the same level of oversight. A 1-point bug fix shouldn't require LLM decomposition and a human approval gate. Conversely, a 40-point epic shouldn't skip planning. The triage step classifies work and routes it to the appropriate pipeline, balancing speed against risk.
 
+Early-stage ideas that haven't been fully specified can also pass through an ideation gate before entering any pipeline — see [Governance Model](governance-model.md) for details.
+
 ## Pipeline Selection
 
 ```mermaid
@@ -17,11 +19,11 @@ flowchart TD
     Triage -- "No GEN label" --> Ignore["Ignored"]
 ```
 
-Triage logic lives in `src/server/orchestrator/triage.ts`. It examines three fields from the `JiraTicket`:
+Triage examines three fields from the Jira ticket:
 
-- **`issueType`** — "Bug" routes to the bug pipeline
-- **`storyPoints`** — Determines complexity tier
-- **`labels`** — Must include "GEN" to be eligible for automation
+- **Issue type** — "Bug" routes to the bug pipeline
+- **Story points** — Determines complexity tier
+- **Labels** — Must include "GEN" to be eligible for automation
 
 ## Bug Pipeline (Stage 1)
 
@@ -31,7 +33,7 @@ The simplest path. A single agent attempts to fix the bug in an iterative loop. 
 flowchart LR
     Ticket["Jira Ticket"] --> BugDoR["Bug DoR"]
     BugDoR -- "pass" --> Agent["Single Agent"]
-    Agent --> Validate["Validate\n(test + lint + security)"]
+    Agent --> Validate["Validate<br/>(test + lint + security)"]
     Validate -- "fail" --> Agent
     Validate -- "pass" --> PR["Create PR"]
     Validate -- "max retries" --> Escalate["Escalate to Human"]
@@ -44,11 +46,6 @@ flowchart LR
 - **Iterative retry loop** — Each retry includes context from prior failures (changed files, test results, error messages) so the agent learns from mistakes
 - **Escalation, not failure** — After max retries, the system notifies humans via Slack and Jira comment rather than silently failing
 - **Never auto-merges** — PR is created; a human merges it
-
-**Key files:**
-- `src/server/orchestrator/bug-pipeline.ts` — `runBugFixLoop()` orchestrates the retry loop
-- `src/server/services/bug-dor.ts` — Simplified DoR rules for bugs
-- `src/server/lib/test-executor.ts` — Runs jest/lint/security in agent's worktree
 
 ## Feature Pipeline (Stage 2)
 
@@ -65,9 +62,9 @@ flowchart TD
     Approval -- "rejected" --> Done["Pipeline Ends"]
     Approval -- "revision" --> Decompose
     Execute --> DoD["DoD Gate"]
-    DoD -- "pass" --> PRs["Create PRs\n(one per task)"]
+    DoD -- "pass" --> PRs["Create PRs<br/>(one per task)"]
     DoD -- "fail" --> Retry["Retry Failed Tasks"]
-    PRs --> MergeSequence["Merge in\nTopological Order"]
+    PRs --> MergeSequence["Merge in<br/>Topological Order"]
     MergeSequence --> HumanMerge["Human Merge"]
 ```
 
@@ -79,13 +76,6 @@ flowchart TD
 - **PR-per-task** — Each task in the dependency graph produces one PR, keeping changes small and reviewable
 - **Topological merge ordering** — PRs are merged in dependency order to prevent conflicts
 
-**Key files:**
-- `src/server/services/bdd-verification.ts` — Parses and validates Given/When/Then scenarios
-- `src/server/orchestrator/decomposer.ts` — LLM-powered decomposition via Anthropic SDK
-- `src/server/orchestrator/parallel-executor.ts` — Concurrent execution respecting dependency graph
-- `src/server/orchestrator/merge-sequencer.ts` — Topological sort for merge ordering
-- `src/server/orchestrator/plan-summary.ts` — Human-readable plan with risk assessment
-
 ## Epic Pipeline (Stage 3)
 
 Epics apply the full 6-stage lifecycle. The LLM decomposes the epic into user stories (each with BDD criteria), which then enter their own sub-pipelines.
@@ -94,12 +84,12 @@ Epics apply the full 6-stage lifecycle. The LLM decomposes the epic into user st
 flowchart TD
     Epic["Jira Epic"] --> DoR["Full DoR Gate"]
     DoR -- "pass" --> Decompose["Decompose into Stories"]
-    Decompose --> Approval{"Human Approval\nof Full Plan"}
+    Decompose --> Approval{"Human Approval<br/>of Full Plan"}
     Approval -- "approved" --> SubTickets["Create Jira Sub-Tickets"]
     SubTickets --> Coordinate["Coordinate Sub-Pipelines"]
-    Coordinate --> Story1["Story 1\n(Feature Pipeline)"]
-    Coordinate --> Story2["Story 2\n(Feature Pipeline)"]
-    Coordinate --> StoryN["Story N\n(Bug/Feature)"]
+    Coordinate --> Story1["Story 1<br/>(Feature Pipeline)"]
+    Coordinate --> Story2["Story 2<br/>(Feature Pipeline)"]
+    Coordinate --> StoryN["Story N<br/>(Bug/Feature)"]
     Story1 --> Track["Aggregate Progress"]
     Story2 --> Track
     StoryN --> Track
@@ -109,13 +99,13 @@ flowchart TD
 **Key design decisions:**
 
 - **Stories are independent pipelines** — Each decomposed story enters the feature (or bug) pipeline independently, enabling parallel work
-- **Aggregate progress tracking** — The orchestrator tracks completion across all sub-pipelines via `Pipeline` + `TaskDecomposition` Prisma models
+- **Aggregate progress tracking** — The orchestrator tracks completion across all sub-pipelines and reports aggregate status
 - **Graceful degradation** — When a task fails, only its dependents are blocked; independent tasks continue executing
 - **No automatic rollback** — Successfully merged PRs stay merged. Reverting is a human decision
 
 ## Epic Lifecycle States
 
-The state machine in `src/server/orchestrator/state-machine.ts` enforces this progression:
+The state machine enforces this progression:
 
 ```mermaid
 stateDiagram-v2
@@ -131,11 +121,11 @@ stateDiagram-v2
     InProgress --> Review: Partial failure (escalate)
 ```
 
-Each transition has guards (conditions that must be true) defined in the state machine. The orchestrator engine evaluates guards before allowing transitions.
+Each transition has guards (conditions that must be true). The orchestrator engine evaluates guards before allowing transitions.
 
 ## Task Dependency Graph
 
-The decomposer produces a `TaskGraph` — a directed acyclic graph where nodes are tasks and edges are dependencies.
+The decomposer produces a directed acyclic graph where nodes are tasks and edges are dependencies.
 
 ```mermaid
 graph TD
@@ -146,18 +136,15 @@ graph TD
     T4 --> T5["task-5: Integration tests"]
 ```
 
-The parallel executor dispatches all tasks whose dependencies are satisfied, up to the concurrency limit (`maxConcurrentTasksPerEpic`, default 3). As tasks complete, newly unblocked tasks are dispatched.
-
-**Key files:**
-- `src/server/orchestrator/task-graph.ts` — `TaskGraph` schema, topological sort, ready-node detection
-- `src/server/orchestrator/types.ts` — `TaskNode`, `DecompositionResult`, `EpicContext`
+The parallel executor dispatches all tasks whose dependencies are satisfied, up to the concurrency limit (configurable, default 3). As tasks complete, newly unblocked tasks are dispatched.
 
 ## File Conflict Detection
 
-Before parallel dispatch, the scheduler checks for overlapping `affectedFiles` between tasks at the same dependency level. Overlapping tasks are serialized to prevent git merge conflicts. This is a static prediction — actual conflicts are caught at PR merge time.
+Before parallel dispatch, the scheduler checks for overlapping affected files between tasks at the same dependency level. Overlapping tasks are serialized to prevent git merge conflicts. This is a static prediction — actual conflicts are caught at PR merge time.
 
 ## Related Documents
 
 - [System Overview](system-overview.md) — High-level system context
 - [Agent Execution Model](agent-execution-model.md) — How individual agents execute tasks
 - [Governance Model](governance-model.md) — Gate details (DoR, DoD, approvals)
+- [Multi-Project & OpenClaw](multi-project-and-openclaw.md) — Per-project agent execution

@@ -6,6 +6,8 @@ Belva-GEN is an autonomous development framework. It reads work from Jira, decom
 
 Manual software development doesn't scale linearly with team size. Belva-GEN automates the predictable parts of the development lifecycle — ticket triage, task decomposition, code generation, test validation, PR creation — while preserving human judgment for planning approval, code review, and merge decisions.
 
+The system supports **multiple projects**, each with its own Jira board, GitHub repo, Slack channel, and specialized agent definitions. Agents working on a Node.js codebase carry Node.js expertise; agents working on a Django codebase carry Django expertise. No cross-stack context waste. See [Multi-Project & OpenClaw](multi-project-and-openclaw.md) for details.
+
 ## System Diagram
 
 ```mermaid
@@ -14,6 +16,7 @@ graph TD
         Jira["Jira Cloud"]
         Slack["Slack"]
         GitHub["GitHub"]
+        OpenClaw["OpenClaw Gateway"]
         Anthropic["Anthropic API"]
     end
 
@@ -24,7 +27,7 @@ graph TD
         end
 
         subgraph Core["Core Engine"]
-            Orchestrator["Orchestrator Engine"]
+            Orchestrator["Orchestrator"]
             StateMachine["State Machine"]
             Triage["Triage"]
             Decomposer["LLM Decomposer"]
@@ -33,8 +36,8 @@ graph TD
         subgraph Agents["Agent Layer"]
             Registry["Agent Registry"]
             Runner["Agent Runner"]
-            MessageBus["Message Bus"]
-            Executor["Agent Executor"]
+            Composer["Prompt Composer"]
+            Executor{"Executor<br/>mock | claude | openclaw"}
         end
 
         subgraph Governance["Governance Layer"]
@@ -46,15 +49,17 @@ graph TD
 
         subgraph Infra["Infrastructure"]
             BullMQ["BullMQ Queues"]
-            Prisma["PostgreSQL via Prisma"]
+            Prisma["PostgreSQL"]
             Redis["Redis"]
         end
 
-        subgraph UI["Dashboard"]
+        subgraph UI["Dashboard (per project)"]
             Overview["Overview"]
             AgentsPage["Agents"]
             Pipeline["Pipeline"]
             Approvals["Approvals"]
+            Knowledge["Knowledge"]
+            Settings["Settings"]
         end
     end
 
@@ -64,15 +69,15 @@ graph TD
     Orchestrator --> Triage
     Triage --> DoR
     DoR -- "pass" --> Decomposer
-    Decomposer --> Anthropic
     Decomposer --> Approval
     Approval --> Slack
     Approval --> Approvals
     Approval -- "approved" --> Runner
-    Runner --> Executor
+    Runner --> Composer
+    Composer --> Executor
+    Executor --> OpenClaw
     Executor --> Anthropic
-    Runner -- "completion" --> MessageBus
-    MessageBus --> Orchestrator
+    Runner -- "completion" --> Orchestrator
     Orchestrator --> DoD
     DoD -- "pass" --> GitHub
     Orchestrator --> Prisma
@@ -86,26 +91,26 @@ graph TD
 
 Work flows through one of three pipelines based on ticket characteristics:
 
-| Pipeline | Trigger | Planning Gate | Agents | Output |
-|----------|---------|---------------|--------|--------|
-| **Bug** (1-2 pts) | Bug + GEN label + low points | Simplified DoR | Single agent | One PR |
-| **Feature** (3-13 pts) | Feature + GEN label | Full DoR + LLM decomposition + human approval | Multi-agent parallel | PR per task |
-| **Epic** (40+ pts) | Epic + GEN label | Full DoR + decomposition into stories + human approval | Coordinated multi-agent | PR per task, sequenced merges |
+| Pipeline | Trigger | Governance | Output |
+| -------- | ------- | ---------- | ------ |
+| **Bug** (1–2 pts) | Bug + GEN label | Simplified DoR, iterative fix loop | One PR |
+| **Feature** (3–13 pts) | Feature + GEN label | Full DoR, LLM decomposition, human approval | PR per task |
+| **Epic** (40+ pts) | Epic + GEN label | Full DoR, story decomposition, human approval | Coordinated PRs |
 
 See [Pipeline Architecture](pipeline-architecture.md) for details.
 
 ### Agents
 
-Four specialized AI agents, each with a bounded domain:
+Four specialized AI agent roles, each with a bounded domain:
 
-| Agent | Domain | Owned Paths |
-|-------|--------|-------------|
-| `orchestrator-project` | Task routing, docs, orchestration | Project-wide |
-| `node-backend` | APIs, database, queues, MCP | `src/server/`, `src/app/api/`, `prisma/` |
-| `next-ux` | React, UI, dashboard | `src/app/dashboard/`, `src/components/` |
-| `ts-testing` | Tests, coverage, budgets | `__tests__/`, `e2e/` |
+| Role | Domain |
+| ---- | ------ |
+| `orchestrator` | Task routing, Jira workflow, governance |
+| `backend` | APIs, database, queues, server logic |
+| `frontend` | React components, dashboard pages, UI |
+| `testing` | Test files, coverage, E2E, performance budgets |
 
-Agents are defined in `.claude/agents/*.md`. These markdown files serve as both documentation and system prompts for the LLM executor.
+Agent definitions are project-specific. Each project repo can define its own agents in `openclaw/agents/`, specialized to that project's stack. The orchestrator loads them dynamically at runtime.
 
 See [Agent Execution Model](agent-execution-model.md) for details.
 
@@ -113,6 +118,7 @@ See [Agent Execution Model](agent-execution-model.md) for details.
 
 Every piece of work passes through quality gates:
 
+- **Ideation Gate** — Validates problem statement and value hypothesis for early-stage ideas
 - **Definition of Ready (DoR)** — Validates ticket quality before work begins
 - **Human Approval** — Mandatory review of decomposition plans before execution
 - **Definition of Done (DoD)** — Validates implementation quality before PR creation
@@ -120,36 +126,36 @@ Every piece of work passes through quality gates:
 
 See [Governance Model](governance-model.md) for details.
 
+### Runtime Configuration
+
+Operational parameters — approval timeouts, concurrency limits, revision cycle caps — are stored in the database and cached in Redis. They can be changed at runtime through the admin panel without redeployment.
+
+## Layered Architecture
+
+The server follows a three-layer pattern:
+
+**API routes** are thin handlers (~20 lines) that parse requests, delegate to a service function, and map domain errors to HTTP status codes. They contain no business logic.
+
+**Services** are pure async functions that implement business logic. They receive explicit dependencies, return domain types, and throw domain errors (`NotFoundError`, `ValidationError`, `GateFailedError`). Services are not classes — they're exported functions, which simplifies testing and composition.
+
+**Providers** are the data sources that services compose: the orchestrator engine, agent registry, database (via Prisma), MCP clients, and Redis cache. A `ServerContext` singleton provides dependency injection — API routes and workers call `getServerContext()` and pass the relevant subset to service functions.
+
 ## Technology Choices
 
 | Choice | Why |
-|--------|-----|
+| ------ | --- |
 | **Next.js App Router** | Unified framework for dashboard UI + API routes; server components minimize JS bundle |
 | **BullMQ** | Reliable async processing with retry/DLQ; decouples webhook ingestion from processing |
-| **Zod** | Runtime type safety at system boundaries; validates all external data (Jira, LLM, webhooks) |
-| **Anthropic Claude** | Powers both task decomposition and agent execution; chosen for consistency with Claude Code ecosystem |
-| **PostgreSQL + Prisma** | Structured data for pipelines, approvals, audit trail; Prisma provides type-safe queries |
-| **Redis** | BullMQ backing store, rate limiting, session cache |
-
-## Key Directories
-
-```
-src/server/orchestrator/    # Core engine, state machine, triage, decomposition, pipelines
-src/server/agents/          # Registry, runner, message bus, execution layer
-src/server/services/        # Business logic (gates, approval, pipeline, webhook, PR)
-src/server/mcp/             # Jira and Slack integration clients
-src/app/api/                # Thin API routes delegating to services
-src/app/dashboard/          # Human-in-the-loop dashboard UI
-src/types/                  # Shared Zod schemas (gates, events, agent protocol)
-.claude/agents/             # Agent definitions (also serve as LLM system prompts)
-.claude/rules/              # Path-specific rules auto-applied to agents
-```
+| **Zod** | Runtime type safety at system boundaries; validates all external data |
+| **OpenClaw** | MCP tool access, workspace isolation, and model routing for production agent execution |
+| **Anthropic Claude** | Powers task decomposition and agent execution; direct API path for dev/fallback |
+| **PostgreSQL + Prisma** | Structured data for pipelines, approvals, audit trail; type-safe queries |
+| **Redis** | BullMQ backing store, rate limiting, session cache, config cache |
 
 ## Related Documents
 
 - [Pipeline Architecture](pipeline-architecture.md) — How work flows from ticket to PR
 - [Agent Execution Model](agent-execution-model.md) — How agents are dispatched and execute
 - [Governance Model](governance-model.md) — Gates, approvals, and audit trail
-- [Integration Layer](integration-layer.md) — Jira, Slack, and GitHub integrations
-- [Service Layer & API](service-layer-api.md) — Three-layer architecture and API design
-- [Deployment Architecture](../deployment-architecture.md) — AWS infrastructure
+- [Integrations & Infrastructure](integrations-and-infrastructure.md) — External systems and deployment
+- [Multi-Project & OpenClaw](multi-project-and-openclaw.md) — Multi-project support and OpenClaw integration
