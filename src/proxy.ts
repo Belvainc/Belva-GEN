@@ -12,6 +12,7 @@ const AUTH_COOKIE = "auth-token";
 const PUBLIC_PATHS = new Set([
   "/login",
   "/api/auth/login",
+  "/api/auth/refresh",
   "/api/health",
 ]);
 

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
+import { AuthRefreshProvider } from "@/components/providers/AuthRefreshProvider";
 import { prisma } from "@/server/db/client";
 
 export default async function DashboardLayout({
@@ -24,7 +25,9 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-screen bg-background">
       <DashboardSidebar userName={userName} userRole={userRole} />
-      <main className="flex-1 overflow-auto p-8">{children}</main>
+      <main className="flex-1 overflow-auto p-8">
+        <AuthRefreshProvider>{children}</AuthRefreshProvider>
+      </main>
     </div>
   );
 }

@@ -76,6 +76,10 @@ model Project {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  // Jira sync tracking
+  lastJiraSyncAt      DateTime?
+  jiraSyncStatus      String?   @default("never") // "never", "syncing", "success", "error"
+
   // Relations
   users               UserProject[]
   credentials         ProjectCredential[]
@@ -83,6 +87,7 @@ model Project {
   agents              Agent[]
   auditLogs           AuditLog[]
   knowledgeEntries    KnowledgeEntry[]
+  jiraIssues          JiraIssue[]
 
   @@map("projects")
 }
@@ -177,8 +182,36 @@ model Pipeline {
   approvals           Approval[]
   decomposition       TaskDecomposition?
   patternExtractions  PatternExtraction[]
+  jiraIssue           JiraIssue?
 
   @@map("pipelines")
+}
+
+// ─── Jira Issues (Synced from Jira — lightweight references) ─────────────────
+
+model JiraIssue {
+  id              String    @id @default(uuid())
+  jiraId          String                          // Jira's internal ID
+  key             String                          // e.g. "TA-42"
+  summary         String                          // One-line title for list display
+  issueType       String                          // "Epic", "Story", "Bug", "Task"
+  jiraStatus      String                          // Jira workflow status name
+  labels          String[]                        // For GEN-label detection
+  epicKey         String?                         // Parent epic key (for hierarchy)
+  projectId       String
+  pipelineId      String?   @unique               // FK to Pipeline if GEN-assigned
+  jiraUpdatedAt   DateTime                        // Track staleness
+  lastSyncedAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  project         Project   @relation(fields: [projectId], references: [id])
+  pipeline        Pipeline? @relation(fields: [pipelineId], references: [id])
+
+  @@unique([projectId, key])
+  @@index([projectId, issueType])
+  @@map("jira_issues")
 }
 
 // ─── Task Decomposition (LLM-generated task graph) ───────────────────────────

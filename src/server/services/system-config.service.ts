@@ -18,6 +18,7 @@ export const SystemConfigKeySchema = z.enum([
   "maxConcurrentTasksPerEpic",
   "enableSlackNotifications",
   "taskTimeoutMs",
+  "jiraSyncIntervalMs",
 ]);
 export type SystemConfigKey = z.infer<typeof SystemConfigKeySchema>;
 
@@ -28,6 +29,7 @@ const DEFAULTS: Record<SystemConfigKey, unknown> = {
   maxConcurrentTasksPerEpic: 3,
   enableSlackNotifications: true,
   taskTimeoutMs: 600_000, // 10 minutes
+  jiraSyncIntervalMs: 15 * 60 * 1000, // 15 minutes
 };
 
 // ─── Read ───────────────────────────────────────────────────────────────────

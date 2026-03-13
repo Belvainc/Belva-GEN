@@ -54,7 +54,12 @@ export async function login(
     throw new AuthenticationError("Invalid email or password");
   }
 
-  const sessionId = await createSession(user.id);
+  let sessionId: string;
+  try {
+    sessionId = await createSession(user.id);
+  } catch (cause: unknown) {
+    throw new Error("Failed to create session — Redis may be unavailable", { cause });
+  }
 
   // Also persist session in DB for admin visibility
   await prisma.session.create({

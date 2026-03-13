@@ -1,9 +1,10 @@
 import Redis from "ioredis";
 import { getEnv } from "./env";
+import { getLogger } from "./logger";
 
 // ─── Redis Client Singleton ──────────────────────────────────────────────────
 // Shared Redis connection for cache, rate limiting, and BullMQ backing store.
-// Uses lazy connect so the app doesn't block on Redis during startup.
+// Connects eagerly so the connection is ready before the first command.
 
 const globalForRedis = globalThis as unknown as {
   redis: Redis | undefined;
@@ -12,13 +13,19 @@ const globalForRedis = globalThis as unknown as {
 function createRedisClient(): Redis {
   const env = getEnv();
 
-  return new Redis(env.REDIS_URL, {
+  const client = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
     retryStrategy(times: number): number {
       return Math.min(times * 200, 5000);
     },
-    lazyConnect: true,
   });
+
+  client.on("error", (err: Error) => {
+    getLogger().error({ err }, "Redis connection error");
+  });
+
+  return client;
 }
 
 export const redis: Redis =

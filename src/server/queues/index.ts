@@ -15,6 +15,7 @@ export const QUEUE_NAMES = {
   NOTIFICATIONS: "notifications",
   EXPIRATION_CHECKS: "expiration-checks",
   KNOWLEDGE_EXTRACTION: "knowledge-extraction",
+  JIRA_SYNC: "jira-sync",
 } as const;
 
 // ─── Job Data Schemas ────────────────────────────────────────────────────────
@@ -83,6 +84,14 @@ export const KnowledgeExtractionJobDataSchema = z.object({
   completedAt: z.string().datetime(),
 });
 export type KnowledgeExtractionJobData = z.infer<typeof KnowledgeExtractionJobDataSchema>;
+
+// ─── Jira Sync Job Data ──────────────────────────────────────────────────────
+
+export const JiraSyncJobDataSchema = z.object({
+  triggeredAt: z.string().datetime(),
+  projectId: z.string().min(1),
+});
+export type JiraSyncJobData = z.infer<typeof JiraSyncJobDataSchema>;
 
 // ─── Default Job Options ─────────────────────────────────────────────────────
 
@@ -156,6 +165,17 @@ export const knowledgeExtractionQueue = new Queue<KnowledgeExtractionJobData>(
   }
 );
 
+export const jiraSyncQueue = new Queue<JiraSyncJobData>(
+  QUEUE_NAMES.JIRA_SYNC,
+  {
+    connection: { url: getConnectionUrl() },
+    defaultJobOptions: {
+      ...DEFAULT_JOB_OPTIONS,
+      attempts: 1, // Don't retry — will run again on next schedule
+    },
+  }
+);
+
 /**
  * Close all queue connections. Called during shutdown.
  */
@@ -166,6 +186,7 @@ export async function closeQueues(): Promise<void> {
     notificationQueue.close(),
     expirationQueue.close(),
     knowledgeExtractionQueue.close(),
+    jiraSyncQueue.close(),
   ]);
 }
 
@@ -209,6 +230,60 @@ export async function stopExpirationChecker(): Promise<void> {
   for (const job of existingJobs) {
     if (job.name === "check-expirations") {
       await expirationQueue.removeRepeatableByKey(job.key);
+    }
+  }
+}
+
+// ─── Jira Sync Repeatable Job ───────────────────────────────────────────────
+
+/** Default Jira sync interval (15 minutes in milliseconds) */
+const JIRA_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
+ * Start a Jira sync repeatable job for a specific project.
+ * Each project gets its own repeatable job with a unique jobId.
+ * Should be called at server startup for each project with Jira configured.
+ */
+export async function startJiraSyncPoller(
+  projectId: string,
+  intervalMs?: number
+): Promise<void> {
+  const jobName = `jira-sync-${projectId}`;
+
+  // Remove any existing repeatable job for this project to avoid duplicates
+  const existingJobs = await jiraSyncQueue.getRepeatableJobs();
+  for (const job of existingJobs) {
+    if (job.name === jobName) {
+      await jiraSyncQueue.removeRepeatableByKey(job.key);
+    }
+  }
+
+  // Add new repeatable job for this project
+  await jiraSyncQueue.add(
+    jobName,
+    { triggeredAt: new Date().toISOString(), projectId },
+    {
+      repeat: {
+        every: intervalMs ?? JIRA_SYNC_INTERVAL_MS,
+      },
+      jobId: `jira-sync-${projectId}-repeatable`,
+    }
+  );
+}
+
+/**
+ * Stop the Jira sync repeatable job for a specific project.
+ * If no projectId is given, stops all Jira sync jobs (for shutdown).
+ */
+export async function stopJiraSyncPoller(projectId?: string): Promise<void> {
+  const existingJobs = await jiraSyncQueue.getRepeatableJobs();
+  for (const job of existingJobs) {
+    if (
+      projectId !== undefined
+        ? job.name === `jira-sync-${projectId}`
+        : job.name.startsWith("jira-sync-")
+    ) {
+      await jiraSyncQueue.removeRepeatableByKey(job.key);
     }
   }
 }

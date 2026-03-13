@@ -6,11 +6,13 @@ import {
   AgentTaskJobDataSchema,
   NotificationJobDataSchema,
   ExpirationCheckJobDataSchema,
+  JiraSyncJobDataSchema,
   type WebhookJobData,
   type AgentTaskJobData,
   type NotificationJobData,
   type ExpirationCheckJobData,
   type KnowledgeExtractionJobData,
+  type JiraSyncJobData,
 } from "@/server/queues";
 import { createChildLogger } from "@/server/config/logger";
 import { getJiraMCPClient, hasGenLabel } from "@/server/mcp/jira";
@@ -24,6 +26,7 @@ import { getOrchestratorEngine } from "@/server/orchestrator";
 import { prisma } from "@/server/db/client";
 import { checkExpiringApprovals } from "./expiration-checker";
 import { processKnowledgeExtraction } from "./knowledge-extraction";
+import { syncJiraTickets } from "./jira-sync";
 import { randomUUID } from "node:crypto";
 
 const logger = createChildLogger({ module: "workers" });
@@ -280,6 +283,29 @@ async function processExpirationCheck(
   );
 }
 
+// ─── Jira Sync Worker ───────────────────────────────────────────────────
+
+async function processJiraSync(job: Job<JiraSyncJobData>): Promise<void> {
+  const data = JiraSyncJobDataSchema.parse(job.data);
+  logger.info(
+    { triggeredAt: data.triggeredAt, projectId: data.projectId, jobId: job.id },
+    "Running Jira sync"
+  );
+
+  const result = await syncJiraTickets(data.projectId);
+
+  logger.info(
+    {
+      totalFound: result.totalFound,
+      upserted: result.upserted,
+      newPipelines: result.newPipelines,
+      errors: result.errors.length,
+      jobId: job.id,
+    },
+    "Jira sync completed"
+  );
+}
+
 // ─── Worker Instances ────────────────────────────────────────────────────
 
 let webhookWorker: Worker<WebhookJobData> | undefined;
@@ -287,6 +313,7 @@ let agentTaskWorker: Worker<AgentTaskJobData> | undefined;
 let notificationWorker: Worker<NotificationJobData> | undefined;
 let expirationWorker: Worker<ExpirationCheckJobData> | undefined;
 let knowledgeWorker: Worker | undefined;
+let jiraSyncWorker: Worker<JiraSyncJobData> | undefined;
 
 /**
  * Start all BullMQ workers. Call once at server startup.
@@ -325,6 +352,12 @@ export function startWorkers(): void {
     { connection, concurrency: 1 }
   );
 
+  jiraSyncWorker = new Worker<JiraSyncJobData>(
+    QUEUE_NAMES.JIRA_SYNC,
+    processJiraSync,
+    { connection, concurrency: 1 }
+  );
+
   // Error handlers
   for (const [name, worker] of Object.entries({
     webhook: webhookWorker,
@@ -332,6 +365,7 @@ export function startWorkers(): void {
     notification: notificationWorker,
     expiration: expirationWorker,
     knowledge: knowledgeWorker,
+    jiraSync: jiraSyncWorker,
   })) {
     worker.on("failed", (job, err) => {
       logger.error(
@@ -359,9 +393,12 @@ export async function stopWorkers(): Promise<void> {
     notificationWorker?.close(),
     expirationWorker?.close(),
     knowledgeWorker?.close(),
+    jiraSyncWorker?.close(),
   ]);
   logger.info("All workers stopped");
 }
 
-// Re-export expiration checker for direct use in tests or API routes
+// Re-export for direct use in tests or API routes
 export { checkExpiringApprovals } from "./expiration-checker";
+export { syncJiraTickets } from "./jira-sync";
+export type { JiraSyncResult } from "./jira-sync";
