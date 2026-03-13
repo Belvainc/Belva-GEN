@@ -2,7 +2,14 @@ import { z } from "zod";
 
 // ─── Gate Types ───────────────────────────────────────────────────────────────
 
-export const GateTypeSchema = z.enum(["dor", "dod", "human-approval"]);
+export const GateTypeSchema = z.enum([
+  "dor",
+  "dod",
+  "human-approval",
+  "ideation",
+  "team-confirmation",
+  "review-synthesis",
+]);
 export type GateType = z.infer<typeof GateTypeSchema>;
 
 // ─── Gate Violation ───────────────────────────────────────────────────────────

@@ -8,12 +8,13 @@ import {
   Bot,
   CheckCircle,
   GitBranch,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/atoms/Badge";
 
-type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder";
+type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder" | "book-open";
 
 interface NavItemProps {
   /** Navigation label */
@@ -35,6 +36,7 @@ const iconMap: Record<IconName, LucideIcon> = {
   "git-branch": GitBranch,
   shield: Shield,
   folder: Folder,
+  "book-open": BookOpen,
 } as const;
 
 /**

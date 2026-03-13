@@ -14,6 +14,7 @@ export const QUEUE_NAMES = {
   AGENT_TASKS: "agent-tasks",
   NOTIFICATIONS: "notifications",
   EXPIRATION_CHECKS: "expiration-checks",
+  KNOWLEDGE_EXTRACTION: "knowledge-extraction",
 } as const;
 
 // ─── Job Data Schemas ────────────────────────────────────────────────────────
@@ -52,9 +53,17 @@ const StatusUpdateNotificationSchema = z.object({
   message: z.string().min(1),
 });
 
+const IdeationRequestNotificationSchema = z.object({
+  type: z.literal("ideation_request"),
+  ticketRef: z.string().min(1),
+  title: z.string().min(1),
+  dashboardUrl: z.string().url(),
+});
+
 export const NotificationJobDataSchema = z.discriminatedUnion("type", [
   ApprovalRequestNotificationSchema,
   StatusUpdateNotificationSchema,
+  IdeationRequestNotificationSchema,
 ]);
 export type NotificationJobData = z.infer<typeof NotificationJobDataSchema>;
 
@@ -64,6 +73,16 @@ export const ExpirationCheckJobDataSchema = z.object({
   triggeredAt: z.string().datetime(),
 });
 export type ExpirationCheckJobData = z.infer<typeof ExpirationCheckJobDataSchema>;
+
+// ─── Knowledge Extraction Job Data ──────────────────────────────────────────
+
+export const KnowledgeExtractionJobDataSchema = z.object({
+  pipelineId: z.string().min(1),
+  ticketRef: z.string().min(1),
+  taskResults: z.unknown(), // Serialized task results
+  completedAt: z.string().datetime(),
+});
+export type KnowledgeExtractionJobData = z.infer<typeof KnowledgeExtractionJobDataSchema>;
 
 // ─── Default Job Options ─────────────────────────────────────────────────────
 
@@ -126,6 +145,17 @@ export const expirationQueue = new Queue<ExpirationCheckJobData>(
   }
 );
 
+export const knowledgeExtractionQueue = new Queue<KnowledgeExtractionJobData>(
+  QUEUE_NAMES.KNOWLEDGE_EXTRACTION,
+  {
+    connection: { url: getConnectionUrl() },
+    defaultJobOptions: {
+      ...DEFAULT_JOB_OPTIONS,
+      attempts: 2,
+    },
+  }
+);
+
 /**
  * Close all queue connections. Called during shutdown.
  */
@@ -135,6 +165,7 @@ export async function closeQueues(): Promise<void> {
     agentTaskQueue.close(),
     notificationQueue.close(),
     expirationQueue.close(),
+    knowledgeExtractionQueue.close(),
   ]);
 }
 

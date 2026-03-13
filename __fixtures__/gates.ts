@@ -25,6 +25,9 @@ This ticket implements the approval card component.
 ## Requirements
 - Display pending approvals in a card layout
 
+## Dependencies
+No dependencies
+
 ## Out-of-Scope
 - Approval history view
 - Email notifications`,
@@ -65,6 +68,9 @@ Return empty list or 503
 
 ## Actual Behavior
 Null pointer exception
+
+## Dependencies
+No dependencies
 
 ## Out-of-Scope
 - Performance optimization`,

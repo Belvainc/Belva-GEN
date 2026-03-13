@@ -89,15 +89,52 @@ export async function approveRequest(
     },
   });
 
-  // Emit event to orchestrator (matches PlanApprovedEventSchema)
-  await deps.engine.handleEvent({
-    kind: "plan-approved",
-    id: randomUUID(),
-    timestamp: new Date().toISOString(),
-    ticketRef: approval.pipelineId,
-    approverIdentity: userId,
-    planHash,
-  });
+  // Route event based on approval type
+  const ticketRef = approval.pipelineId;
+  const now = new Date().toISOString();
+
+  switch (approval.type) {
+    case "STAKEHOLDER":
+      await deps.engine.handleEvent({
+        kind: "ideation-approved",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        stakeholderIdentity: userId,
+        rationale: comment ?? "Approved",
+      });
+      break;
+    case "TEAM_CONFIRMATION":
+      await deps.engine.handleEvent({
+        kind: "team-confirmed",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        confirmedBy: userId,
+      });
+      break;
+    case "CODE_REVIEW":
+      await deps.engine.handleEvent({
+        kind: "review-completed",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        verdict: "APPROVE",
+        findingSummary: comment ?? "Code review approved",
+      });
+      break;
+    default:
+      // PLAN, DEPLOY, RISK — original behavior
+      await deps.engine.handleEvent({
+        kind: "plan-approved",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        approverIdentity: userId,
+        planHash,
+      });
+      break;
+  }
 
   return updated;
 }
@@ -129,15 +166,43 @@ export async function rejectRequest(
     },
   });
 
-  // Emit event to orchestrator (matches PlanRejectedEventSchema)
-  await deps.engine.handleEvent({
-    kind: "plan-rejected",
-    id: randomUUID(),
-    timestamp: new Date().toISOString(),
-    ticketRef: approval.pipelineId,
-    reviewerIdentity: userId,
-    reason,
-  });
+  // Route event based on approval type
+  const ticketRef = approval.pipelineId;
+  const now = new Date().toISOString();
+
+  switch (approval.type) {
+    case "STAKEHOLDER":
+      await deps.engine.handleEvent({
+        kind: "ideation-rejected",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        stakeholderIdentity: userId,
+        reason,
+      });
+      break;
+    case "CODE_REVIEW":
+      await deps.engine.handleEvent({
+        kind: "review-completed",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        verdict: "REQUEST_CHANGES",
+        findingSummary: reason,
+      });
+      break;
+    default:
+      // PLAN, DEPLOY, RISK, TEAM_CONFIRMATION — original behavior
+      await deps.engine.handleEvent({
+        kind: "plan-rejected",
+        id: randomUUID(),
+        timestamp: now,
+        ticketRef,
+        reviewerIdentity: userId,
+        reason,
+      });
+      break;
+  }
 
   return updated;
 }

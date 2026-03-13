@@ -10,6 +10,7 @@ import {
   type AgentTaskJobData,
   type NotificationJobData,
   type ExpirationCheckJobData,
+  type KnowledgeExtractionJobData,
 } from "@/server/queues";
 import { createChildLogger } from "@/server/config/logger";
 import { getJiraMCPClient, hasGenLabel } from "@/server/mcp/jira";
@@ -22,6 +23,7 @@ import { SlackApprovalSchema } from "@/server/mcp/slack/types";
 import { getOrchestratorEngine } from "@/server/orchestrator";
 import { prisma } from "@/server/db/client";
 import { checkExpiringApprovals } from "./expiration-checker";
+import { processKnowledgeExtraction } from "./knowledge-extraction";
 import { randomUUID } from "node:crypto";
 
 const logger = createChildLogger({ module: "workers" });
@@ -284,6 +286,7 @@ let webhookWorker: Worker<WebhookJobData> | undefined;
 let agentTaskWorker: Worker<AgentTaskJobData> | undefined;
 let notificationWorker: Worker<NotificationJobData> | undefined;
 let expirationWorker: Worker<ExpirationCheckJobData> | undefined;
+let knowledgeWorker: Worker | undefined;
 
 /**
  * Start all BullMQ workers. Call once at server startup.
@@ -316,12 +319,19 @@ export function startWorkers(): void {
     { connection, concurrency: 1 } // Only one at a time
   );
 
+  knowledgeWorker = new Worker<KnowledgeExtractionJobData>(
+    QUEUE_NAMES.KNOWLEDGE_EXTRACTION,
+    processKnowledgeExtraction,
+    { connection, concurrency: 1 }
+  );
+
   // Error handlers
   for (const [name, worker] of Object.entries({
     webhook: webhookWorker,
     agentTask: agentTaskWorker,
     notification: notificationWorker,
     expiration: expirationWorker,
+    knowledge: knowledgeWorker,
   })) {
     worker.on("failed", (job, err) => {
       logger.error(
@@ -348,6 +358,7 @@ export async function stopWorkers(): Promise<void> {
     agentTaskWorker?.close(),
     notificationWorker?.close(),
     expirationWorker?.close(),
+    knowledgeWorker?.close(),
   ]);
   logger.info("All workers stopped");
 }

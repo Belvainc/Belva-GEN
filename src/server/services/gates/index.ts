@@ -1,3 +1,12 @@
+// ─── Ideation Validation ─────────────────────────────────────────────────────
+export { evaluateIdeation } from "./ideation-validation";
+export {
+  checkProblemStatement,
+  checkValueHypothesis,
+  checkOwnerAssigned,
+  checkStrategicAlignment,
+} from "./ideation-rules";
+
 // ─── DoR Validation ───────────────────────────────────────────────────────────
 export { evaluateDoR } from "./dor-validation";
 export {
@@ -8,6 +17,8 @@ export {
   checkTitleLength,
   checkBugReproductionSteps,
   checkBugExpectedActual,
+  checkDependenciesIdentified,
+  checkTeamAssigned,
 } from "./dor-rules";
 
 // ─── DoD Validation ───────────────────────────────────────────────────────────

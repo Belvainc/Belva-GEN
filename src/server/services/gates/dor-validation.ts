@@ -8,6 +8,8 @@ import {
   checkTitleLength,
   checkBugReproductionSteps,
   checkBugExpectedActual,
+  checkDependenciesIdentified,
+  checkTeamAssigned,
 } from "./dor-rules";
 import { createAgentLogger } from "@/lib/logger";
 
@@ -31,6 +33,9 @@ const DOR_RULES: readonly RuleFunction[] = [
   // Bug-specific (only applies to bug tickets)
   checkBugReproductionSteps,
   checkBugExpectedActual,
+  // Dependencies and team ownership (Stage 2: Ready)
+  checkDependenciesIdentified,
+  checkTeamAssigned,
 ];
 
 /**

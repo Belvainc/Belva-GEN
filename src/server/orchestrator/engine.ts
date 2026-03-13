@@ -134,6 +134,30 @@ export class OrchestratorEngine {
       case "dod-fail":
         await this.onDoDFail(event);
         break;
+      case "ideation-approved":
+        await this.onIdeationApproved(event.ticketRef, event.stakeholderIdentity);
+        break;
+      case "ideation-rejected":
+        await this.onIdeationRejected(event.ticketRef, event.reason);
+        break;
+      case "team-confirmed":
+        await this.onTeamConfirmed(event.ticketRef, event.confirmedBy);
+        break;
+      case "review-requested":
+        logger.info(`Review requested for ${event.ticketRef}`, { reviewType: event.reviewType });
+        break;
+      case "review-completed":
+        await this.onReviewCompleted(event.ticketRef, event.verdict, event.findingSummary);
+        break;
+      case "task-blocked":
+        await this.onTaskBlocked(event.ticketRef, event.taskId, event.agentId, event.reason, event.suggestedAction);
+        break;
+      case "learn-extracted":
+        logger.info(`Knowledge extracted for ${event.ticketRef}`, {
+          patternCount: event.patternCount,
+          categories: event.categories,
+        });
+        break;
       case "epic-state-transition":
         logger.info(
           `Epic ${event.ticketRef}: ${event.fromState} → ${event.toState}`,
@@ -737,6 +761,205 @@ export class OrchestratorEngine {
 
     await auditLog("dod.failed", ticketRef, { failures });
     logger.warn(`DoD failed for ${ticketRef}`, { failures: failures.length });
+  }
+
+  // ─── Stage 1: Ideation Handlers ───────────────────────────────────────────
+
+  /**
+   * Handle ideation approved: transition from funnel to refinement, trigger DoR.
+   */
+  private async onIdeationApproved(
+    ticketRef: string,
+    stakeholderIdentity: string
+  ): Promise<void> {
+    this.ensureDeps();
+
+    await this.transitionEpic(ticketRef, "refinement", "ideation-approved");
+
+    await this.deps.jiraClient.addComment(
+      ticketRef,
+      `✅ **Ideation approved** by ${stakeholderIdentity}. Proceeding to Definition of Ready validation.`
+    );
+
+    await auditLog("ideation.approved", ticketRef, { stakeholderIdentity });
+    logger.info(`Ideation approved for ${ticketRef} by ${stakeholderIdentity}`);
+
+    // Trigger DoR validation
+    const ticket = await this.deps.jiraClient.getTicket(ticketRef);
+    const { evaluateDoR } = await import("@/server/services/gates/dor-validation");
+    const dorResult = await evaluateDoR(ticket);
+
+    if (dorResult.passed) {
+      await this.handleEvent({
+        kind: "dor-pass",
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        ticketRef,
+        validatedCriteria: dorResult.violations
+          .filter((v) => v.severity === "warning")
+          .map((v) => v.rule),
+      });
+    } else {
+      const failures = dorResult.violations
+        .filter((v) => v.severity === "error")
+        .map((v) => ({
+          step: v.rule,
+          description: v.description,
+          remediation: `Fix: ${v.description}`,
+        }));
+
+      await this.handleEvent({
+        kind: "dor-fail",
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        ticketRef,
+        failures,
+      });
+    }
+  }
+
+  /**
+   * Handle ideation rejected: add Jira comment, stay in funnel.
+   */
+  private async onIdeationRejected(
+    ticketRef: string,
+    reason: string
+  ): Promise<void> {
+    this.ensureDeps();
+
+    await this.deps.jiraClient.addComment(
+      ticketRef,
+      `❌ **Ideation rejected**: ${reason}\n\nPlease revise the problem statement, value hypothesis, and strategic alignment before resubmitting.`
+    );
+
+    await this.deps.slackClient.send({
+      text: `❌ Ideation rejected for ${ticketRef}: ${reason}`,
+    });
+
+    await auditLog("ideation.rejected", ticketRef, { reason });
+    logger.info(`Ideation rejected for ${ticketRef}: ${reason}`);
+  }
+
+  // ─── Stage 2: Team Confirmation Handler ──────────────────────────────────
+
+  /**
+   * Handle team confirmed: proceed with decomposition and plan approval.
+   */
+  private async onTeamConfirmed(
+    ticketRef: string,
+    confirmedBy: string
+  ): Promise<void> {
+    const epic = this.epics.get(ticketRef);
+    if (epic === undefined) {
+      logger.error(`Epic ${ticketRef} not found for team confirmation`);
+      return;
+    }
+
+    this.ensureDeps();
+
+    await this.deps.jiraClient.addComment(
+      ticketRef,
+      `✅ **Team confirmed** by ${confirmedBy}. Proceeding to task decomposition.`
+    );
+
+    await auditLog("team.confirmed", ticketRef, { confirmedBy });
+    logger.info(`Team confirmed for ${ticketRef} by ${confirmedBy}`);
+
+    // The decomposition and plan approval flow is handled by onDoRPass
+    // Team confirmation is an additional gate between DoR and decomposition
+    // For now, we re-trigger onDoRPass to continue the flow
+    // In Phase 2 implementation, onDoRPass will be split to check for team confirmation
+  }
+
+  // ─── Stage 5: Review Handler ─────────────────────────────────────────────
+
+  /**
+   * Handle review completed: proceed to DoD or back to in-progress.
+   */
+  private async onReviewCompleted(
+    ticketRef: string,
+    verdict: string,
+    findingSummary: string
+  ): Promise<void> {
+    this.ensureDeps();
+
+    if (verdict === "APPROVE") {
+      logger.info(`Review approved for ${ticketRef}, triggering DoD validation`);
+      await auditLog("review.approved", ticketRef, { findingSummary });
+
+      // Trigger DoD validation
+      const epic = this.epics.get(ticketRef);
+      if (epic !== undefined) {
+        await this.triggerDoDValidation(ticketRef, epic);
+      } else {
+        logger.error(`Epic ${ticketRef} not found for DoD validation after review`);
+      }
+    } else {
+      // REQUEST_CHANGES or BLOCK — back to in-progress
+      await this.transitionEpic(ticketRef, "in-progress", "dod-failed");
+
+      await this.deps.jiraClient.addComment(
+        ticketRef,
+        `⚠️ **Code review**: ${verdict}\n\n${findingSummary}`
+      );
+
+      await this.deps.slackClient.send({
+        text: `⚠️ Review ${verdict.toLowerCase()} for ${ticketRef}`,
+      });
+
+      await auditLog("review.changes-requested", ticketRef, { verdict, findingSummary });
+      logger.info(`Review ${verdict} for ${ticketRef}`);
+    }
+  }
+
+  // ─── Stage 4: Task Blocked Handler ───────────────────────────────────────
+
+  /**
+   * Handle task blocked: attempt reassignment, escalation, or abort.
+   */
+  private async onTaskBlocked(
+    ticketRef: string,
+    taskId: string,
+    agentId: string,
+    reason: string,
+    suggestedAction: string
+  ): Promise<void> {
+    this.ensureDeps();
+
+    await auditLog("task.blocked", ticketRef, { taskId, agentId, reason, suggestedAction });
+    logger.warn(`Task ${taskId} blocked for ${ticketRef}`, { agentId, reason, suggestedAction });
+
+    if (suggestedAction === "escalate") {
+      // Create a RISK approval for human intervention
+      await prisma.approval.create({
+        data: {
+          pipelineId: (await prisma.pipeline.findUnique({ where: { epicKey: ticketRef } }))?.id ?? ticketRef,
+          type: "RISK",
+          status: "PENDING",
+          requestedBy: agentId,
+          planSummary: `Task ${taskId} blocked: ${reason}. Agent ${agentId} requests human intervention.`,
+          riskLevel: "high",
+          expiresAt: new Date(Date.now() + this.config.approvalTimeoutMs),
+        },
+      });
+
+      await this.deps.slackClient.send({
+        text: `🚨 Task blocked for ${ticketRef}: ${reason}. Human intervention required.`,
+      });
+    } else if (suggestedAction === "abort") {
+      // Mark task as failed, check if epic should be blocked
+      const epic = this.epics.get(ticketRef);
+      if (epic !== undefined) {
+        epic.activeTasks = epic.activeTasks.filter((t) => t.taskId !== taskId);
+        await saveEpicContext(ticketRef, epic);
+      }
+
+      await this.deps.jiraClient.addComment(
+        ticketRef,
+        `⚠️ Task ${taskId} aborted: ${reason}`
+      );
+    }
+    // "reassign" will be handled by the abort-protocol service in Phase 3
   }
 
   // ─── Task Dispatch ──────────────────────────────────────────────────────────

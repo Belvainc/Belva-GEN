@@ -85,6 +85,65 @@ export const DoDFailEventSchema = EventBaseSchema.extend({
 });
 export type DoDFailEvent = z.infer<typeof DoDFailEventSchema>;
 
+// ─── Ideation Events ─────────────────────────────────────────────────────────
+
+export const IdeationApprovedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("ideation-approved"),
+  stakeholderIdentity: z.string().min(1),
+  rationale: z.string().min(1),
+});
+export type IdeationApprovedEvent = z.infer<typeof IdeationApprovedEventSchema>;
+
+export const IdeationRejectedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("ideation-rejected"),
+  stakeholderIdentity: z.string().min(1),
+  reason: z.string().min(1),
+});
+export type IdeationRejectedEvent = z.infer<typeof IdeationRejectedEventSchema>;
+
+// ─── Team Confirmation Events ────────────────────────────────────────────────
+
+export const TeamConfirmedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("team-confirmed"),
+  confirmedBy: z.string().min(1),
+});
+export type TeamConfirmedEvent = z.infer<typeof TeamConfirmedEventSchema>;
+
+// ─── Review Events ───────────────────────────────────────────────────────────
+
+export const ReviewRequestedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("review-requested"),
+  reviewType: z.enum(["trivial", "standard", "complex"]),
+});
+export type ReviewRequestedEvent = z.infer<typeof ReviewRequestedEventSchema>;
+
+export const ReviewCompletedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("review-completed"),
+  verdict: z.enum(["APPROVE", "REQUEST_CHANGES", "BLOCK"]),
+  findingSummary: z.string().min(1),
+});
+export type ReviewCompletedEvent = z.infer<typeof ReviewCompletedEventSchema>;
+
+// ─── Task Blocked Events ─────────────────────────────────────────────────────
+
+export const TaskBlockedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("task-blocked"),
+  taskId: z.string().min(1),
+  agentId: z.string().min(1),
+  reason: z.string().min(1),
+  suggestedAction: z.enum(["reassign", "escalate", "abort"]),
+});
+export type TaskBlockedEvent = z.infer<typeof TaskBlockedEventSchema>;
+
+// ─── Learn Events ────────────────────────────────────────────────────────────
+
+export const LearnExtractedEventSchema = EventBaseSchema.extend({
+  kind: z.literal("learn-extracted"),
+  patternCount: z.number().int().min(0),
+  categories: z.array(z.string()),
+});
+export type LearnExtractedEvent = z.infer<typeof LearnExtractedEventSchema>;
+
 // ─── Epic State Transition ────────────────────────────────────────────────────
 
 export const EpicStateSchema = z.enum([
@@ -118,6 +177,13 @@ export const DomainEventSchema = z.discriminatedUnion("kind", [
   PlanExpiredEventSchema,
   DoDPassEventSchema,
   DoDFailEventSchema,
+  IdeationApprovedEventSchema,
+  IdeationRejectedEventSchema,
+  TeamConfirmedEventSchema,
+  ReviewRequestedEventSchema,
+  ReviewCompletedEventSchema,
+  TaskBlockedEventSchema,
+  LearnExtractedEventSchema,
   EpicStateTransitionEventSchema,
 ]);
 export type DomainEvent = z.infer<typeof DomainEventSchema>;

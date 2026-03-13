@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { NavItem } from "@/components/molecules/NavItem";
 import { Text } from "@/components/atoms/Text";
 
-type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder";
+type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder" | "book-open";
 
 interface NavItemConfig {
   href: string;
@@ -46,6 +46,7 @@ export function DashboardSidebar({
           { href: `/dashboard/${projectSlug}/agents`, label: "Agents", icon: "bot" },
           { href: `/dashboard/${projectSlug}/approvals`, label: "Approvals", icon: "check-circle" },
           { href: `/dashboard/${projectSlug}/pipeline`, label: "Pipeline", icon: "git-branch" },
+          { href: `/dashboard/${projectSlug}/knowledge`, label: "Knowledge", icon: "book-open" },
         ]
       : [{ href: "/dashboard", label: "Projects", icon: "folder" }];
 

@@ -124,6 +124,38 @@ export const StatusUpdateSchema = MessageBaseSchema.extend({
 });
 export type StatusUpdate = z.infer<typeof StatusUpdateSchema>;
 
+// ─── Task Blocked ────────────────────────────────────────────────────────────
+
+export const BlockerTypeSchema = z.enum([
+  "dependency",
+  "error",
+  "complexity",
+  "timeout",
+]);
+export type BlockerType = z.infer<typeof BlockerTypeSchema>;
+
+export const TaskBlockedMessageSchema = MessageBaseSchema.extend({
+  kind: z.literal("task-blocked"),
+  sourceAgent: AgentIdSchema,
+  taskId: z.string().min(1),
+  ticketRef: z.string().min(1),
+  reason: z.string().min(1),
+  blockerType: BlockerTypeSchema,
+  suggestedAction: z.enum(["reassign", "escalate", "abort"]),
+});
+export type TaskBlockedMessage = z.infer<typeof TaskBlockedMessageSchema>;
+
+// ─── Task Abort Requested ────────────────────────────────────────────────────
+
+export const TaskAbortRequestedSchema = MessageBaseSchema.extend({
+  kind: z.literal("task-abort-requested"),
+  sourceAgent: AgentIdSchema,
+  taskId: z.string().min(1),
+  ticketRef: z.string().min(1),
+  reason: z.string().min(1),
+});
+export type TaskAbortRequested = z.infer<typeof TaskAbortRequestedSchema>;
+
 // ─── Discriminated Union ──────────────────────────────────────────────────────
 
 export const AgentMessageSchema = z.discriminatedUnion("kind", [
@@ -134,6 +166,8 @@ export const AgentMessageSchema = z.discriminatedUnion("kind", [
   HumanApprovalRequestSchema,
   HumanApprovalResponseSchema,
   StatusUpdateSchema,
+  TaskBlockedMessageSchema,
+  TaskAbortRequestedSchema,
 ]);
 export type AgentMessage = z.infer<typeof AgentMessageSchema>;
 

@@ -16,6 +16,28 @@ interface ApprovalCardProps {
 
 type ActionType = "approve" | "reject" | "revision";
 
+// ─── Type Badge ──────────────────────────────────────────────────────────────
+
+const TYPE_LABELS: Record<string, { label: string; className: string }> = {
+  PLAN: { label: "Plan Review", className: "bg-blue-100 text-blue-800" },
+  CODE_REVIEW: { label: "Code Review", className: "bg-purple-100 text-purple-800" },
+  STAKEHOLDER: { label: "Stakeholder", className: "bg-amber-100 text-amber-800" },
+  TEAM_CONFIRMATION: { label: "Team Confirmation", className: "bg-teal-100 text-teal-800" },
+  DEPLOY: { label: "Deploy", className: "bg-green-100 text-green-800" },
+  RISK: { label: "Risk", className: "bg-red-100 text-red-800" },
+};
+
+function TypeBadge({ type }: { type: string }): ReactNode {
+  const config = TYPE_LABELS[type] ?? { label: type, className: "bg-gray-100 text-gray-800" };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${config.className}`}
+    >
+      {config.label}
+    </span>
+  );
+}
+
 // ─── Risk Badge ───────────────────────────────────────────────────────────────
 
 function RiskBadge({ level }: { level: string | null }): ReactNode {
@@ -110,6 +132,7 @@ export function ApprovalCard({
             {approval.pipelineId}
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2">
+            <TypeBadge type={approval.type} />
             <RiskBadge level={approval.riskLevel} />
             {approval.estimatedPoints !== null && (
               <span className="text-sm text-text-secondary">

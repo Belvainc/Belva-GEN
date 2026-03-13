@@ -81,6 +81,7 @@ model Project {
   pipelines           Pipeline[]
   agents              Agent[]
   auditLogs           AuditLog[]
+  knowledgeEntries    KnowledgeEntry[]
 
   @@map("projects")
 }
@@ -167,10 +168,11 @@ model Pipeline {
   updatedAt       DateTime        @updatedAt
 
   // Relations
-  project         Project?        @relation(fields: [projectId], references: [id])
-  stages          PipelineStage[]
-  approvals       Approval[]
-  decomposition   TaskDecomposition?
+  project             Project?            @relation(fields: [projectId], references: [id])
+  stages              PipelineStage[]
+  approvals           Approval[]
+  decomposition       TaskDecomposition?
+  patternExtractions  PatternExtraction[]
 
   @@map("pipelines")
 }
@@ -218,6 +220,8 @@ enum ApprovalType {
   DEPLOY
   RISK
   PLAN
+  STAKEHOLDER
+  TEAM_CONFIRMATION
 }
 
 enum ApprovalStatus {
@@ -280,4 +284,58 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@map("audit_logs")
+}
+
+// ─── Knowledge System (Stage 6: Learn) ──────────────────────────────────────
+
+enum KnowledgeCategory {
+  PATTERN
+  GOTCHA
+  DECISION
+  OPTIMIZATION
+}
+
+enum KnowledgeStatus {
+  DRAFT
+  VALIDATED
+  PROMOTED
+  ARCHIVED
+}
+
+model KnowledgeEntry {
+  id                String            @id @default(uuid())
+  projectId         String?
+  agentId           String?
+  category          KnowledgeCategory
+  title             String
+  content           String            @db.Text
+  sourceTicketRef   String?           // Originating Jira ticket
+  confidence        Float             @default(0.5) // 0.0 to 1.0
+  status            KnowledgeStatus   @default(DRAFT)
+  promotedTo        String?           // Where promoted: "shared-memory", "rule", "skill"
+  validatedCount    Int               @default(0)   // Number of builds that validated this
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  validatedAt       DateTime?
+
+  // Relations
+  project           Project?          @relation(fields: [projectId], references: [id])
+
+  @@index([category])
+  @@index([status])
+  @@index([sourceTicketRef])
+  @@map("knowledge_entries")
+}
+
+model PatternExtraction {
+  id                  String          @id @default(uuid())
+  pipelineId          String
+  extractedPatterns   Json            // Array of extracted pattern summaries
+  extractedAt         DateTime        @default(now())
+
+  // Relations
+  pipeline            Pipeline        @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineId])
+  @@map("pattern_extractions")
 }

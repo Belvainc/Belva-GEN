@@ -180,3 +180,46 @@ export function checkBugExpectedActual(
 
   return null;
 }
+
+// ─── Dependency Identification ───────────────────────────────────────────────
+
+/**
+ * Check that the description identifies dependencies.
+ * Must contain a "Dependencies" or "Blocked by" section.
+ */
+export function checkDependenciesIdentified(
+  ticket: JiraTicket
+): GateViolation | null {
+  const hasDependencies =
+    /\b(dependenc(y|ies)|blocked[- ]?by|depends[- ]?on|prerequisite|no dependenc)/i.test(
+      ticket.description
+    );
+
+  if (!hasDependencies) {
+    return {
+      rule: "dependencies-identified",
+      description:
+        "Description must include a 'Dependencies' section (even if none exist, state 'No dependencies')",
+      severity: "error",
+    };
+  }
+
+  return null;
+}
+
+// ─── Team Ownership ──────────────────────────────────────────────────────────
+
+/**
+ * Check that the ticket has an assignee indicating team ownership.
+ */
+export function checkTeamAssigned(ticket: JiraTicket): GateViolation | null {
+  if (ticket.assignee === null || ticket.assignee.trim() === "") {
+    return {
+      rule: "team-assigned",
+      description: "Ticket must have an assignee before proceeding to planning",
+      severity: "error",
+    };
+  }
+
+  return null;
+}

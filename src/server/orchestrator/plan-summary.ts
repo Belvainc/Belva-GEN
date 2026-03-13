@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { AgentId } from "@/types/agent-protocol";
 import type { DecompositionResult, TaskGraph, TaskNode } from "./types";
+import type { ArchitectureReview } from "@/server/services/architecture-review";
 
 // ─── Plan Summary Types ───────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export interface PlanSummary {
   dependencyGraph: string;   // Mermaid diagram representation
   planHash: string;          // SHA-256 for audit integrity
   agentAssignments: AgentAssignment[];
+  architectureReview?: ArchitectureReview;
+  applicableRules: string[];
 }
 
 // ─── Risk Level Calculation ───────────────────────────────────────────────────
@@ -194,5 +197,6 @@ export function generatePlanSummary(
     dependencyGraph,
     planHash,
     agentAssignments,
+    applicableRules: [],
   };
 }
