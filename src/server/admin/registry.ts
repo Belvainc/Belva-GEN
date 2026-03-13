@@ -16,6 +16,9 @@ const userConfig: ModelConfig = {
   slug: "users",
   defaultSort: { field: "createdAt", direction: "desc" },
   searchableFields: ["email", "name"],
+  allowCreate: true,
+  allowEdit: true,
+  allowDelete: true,
   columns: [
     { key: "id", label: "ID", type: "uuid", inList: true, readOnly: true },
     { key: "email", label: "Email", type: "email", inList: true, sortable: true, searchable: true, inCreate: true, inEdit: true },
@@ -32,6 +35,9 @@ const projectConfig: ModelConfig = {
   slug: "projects",
   defaultSort: { field: "createdAt", direction: "desc" },
   searchableFields: ["name", "slug"],
+  allowCreate: true,
+  allowEdit: true,
+  allowDelete: true,
   columns: [
     { key: "id", label: "ID", type: "uuid", inList: true, readOnly: true },
     { key: "name", label: "Name", type: "string", inList: true, sortable: true, searchable: true, inCreate: true, inEdit: true },
@@ -49,15 +55,19 @@ const agentConfig: ModelConfig = {
   slug: "agents",
   defaultSort: { field: "createdAt", direction: "desc" },
   searchableFields: ["id", "name"],
+  allowEdit: true,
   columns: [
     { key: "id", label: "ID", type: "string", inList: true, readOnly: true },
     { key: "name", label: "Name", type: "string", inList: true, sortable: true, searchable: true },
+    { key: "description", label: "Description", type: "text" },
     { key: "role", label: "Role", type: "string", inList: true, sortable: true },
     { key: "status", label: "Status", type: "enum", enumValues: ["IDLE", "BUSY", "ERROR", "OFFLINE"], inList: true, sortable: true, filterable: true },
     { key: "preferredModel", label: "Model", type: "string", inList: true, inEdit: true },
     { key: "isActive", label: "Active", type: "boolean", inList: true, filterable: true, inEdit: true },
     { key: "currentTask", label: "Current Task", type: "string", inList: true },
     { key: "lastHeartbeat", label: "Last Heartbeat", type: "datetime", inList: true, sortable: true, readOnly: true },
+    { key: "capabilities", label: "Capabilities", type: "json", readOnly: true },
+    { key: "ownedPaths", label: "Owned Paths", type: "json", readOnly: true },
   ],
 };
 
@@ -67,6 +77,9 @@ const systemConfigConfig: ModelConfig = {
   slug: "system-config",
   defaultSort: { field: "updatedAt", direction: "desc" },
   searchableFields: ["key"],
+  allowCreate: true,
+  allowEdit: true,
+  allowDelete: true,
   columns: [
     { key: "id", label: "ID", type: "uuid", inList: false, readOnly: true },
     { key: "key", label: "Key", type: "string", inList: true, sortable: true, searchable: true, inCreate: true },
@@ -87,6 +100,7 @@ const pipelineConfig: ModelConfig = {
     { key: "epicKey", label: "Epic Key", type: "string", inList: true, sortable: true, searchable: true },
     { key: "status", label: "Status", type: "enum", enumValues: ["FUNNEL", "REFINEMENT", "APPROVED", "IN_PROGRESS", "REVIEW", "DONE"], inList: true, sortable: true, filterable: true },
     { key: "revisionCount", label: "Revisions", type: "number", inList: true, sortable: true },
+    { key: "projectId", label: "Project", type: "relation", inList: true },
     { key: "createdAt", label: "Created", type: "datetime", inList: true, sortable: true, readOnly: true },
   ],
 };
@@ -99,10 +113,13 @@ const approvalConfig: ModelConfig = {
   searchableFields: ["requestedBy"],
   columns: [
     { key: "id", label: "ID", type: "uuid", inList: true, readOnly: true },
-    { key: "type", label: "Type", type: "enum", enumValues: ["CODE_REVIEW", "DEPLOY", "RISK", "PLAN"], inList: true, sortable: true, filterable: true },
+    { key: "type", label: "Type", type: "enum", enumValues: ["CODE_REVIEW", "DEPLOY", "RISK", "PLAN", "STAKEHOLDER", "TEAM_CONFIRMATION"], inList: true, sortable: true, filterable: true },
     { key: "status", label: "Status", type: "enum", enumValues: ["PENDING", "APPROVED", "REJECTED", "EXPIRED"], inList: true, sortable: true, filterable: true },
     { key: "requestedBy", label: "Requested By", type: "string", inList: true },
     { key: "riskLevel", label: "Risk", type: "string", inList: true },
+    { key: "reason", label: "Reason", type: "text" },
+    { key: "planSummary", label: "Plan Summary", type: "text" },
+    { key: "decidedAt", label: "Decided At", type: "datetime", readOnly: true },
     { key: "createdAt", label: "Created", type: "datetime", inList: true, sortable: true, readOnly: true },
   ],
 };
@@ -115,11 +132,36 @@ const auditLogConfig: ModelConfig = {
   searchableFields: ["action", "entityType", "entityId"],
   columns: [
     { key: "id", label: "ID", type: "uuid", inList: true, readOnly: true },
-    { key: "action", label: "Action", type: "string", inList: true, sortable: true, searchable: true },
+    { key: "action", label: "Action", type: "string", inList: true, sortable: true, searchable: true, filterable: true },
     { key: "entityType", label: "Entity Type", type: "string", inList: true, sortable: true, filterable: true },
     { key: "entityId", label: "Entity ID", type: "string", inList: true },
     { key: "agentId", label: "Agent", type: "string", inList: true },
     { key: "userId", label: "User", type: "string", inList: true },
+    { key: "payload", label: "Payload", type: "json", readOnly: true },
+    { key: "createdAt", label: "Created", type: "datetime", inList: true, sortable: true, readOnly: true },
+  ],
+};
+
+const knowledgeConfig: ModelConfig = {
+  name: "KnowledgeEntry",
+  pluralName: "Knowledge",
+  slug: "knowledge",
+  defaultSort: { field: "createdAt", direction: "desc" },
+  searchableFields: ["title", "sourceTicketRef"],
+  allowCreate: true,
+  allowEdit: true,
+  allowDelete: true,
+  columns: [
+    { key: "id", label: "ID", type: "uuid", inList: true, readOnly: true },
+    { key: "title", label: "Title", type: "string", inList: true, sortable: true, searchable: true, inCreate: true, inEdit: true },
+    { key: "category", label: "Category", type: "enum", enumValues: ["PATTERN", "GOTCHA", "DECISION", "OPTIMIZATION"], inList: true, sortable: true, filterable: true, inCreate: true, inEdit: true },
+    { key: "status", label: "Status", type: "enum", enumValues: ["DRAFT", "VALIDATED", "PROMOTED", "ARCHIVED"], inList: true, sortable: true, filterable: true, inEdit: true },
+    { key: "content", label: "Content", type: "text", inCreate: true, inEdit: true },
+    { key: "confidence", label: "Confidence", type: "number", inList: true, inEdit: true },
+    { key: "sourceTicketRef", label: "Source Ticket", type: "string", inList: true, inCreate: true },
+    { key: "agentId", label: "Agent", type: "string", inList: true },
+    { key: "validatedCount", label: "Validations", type: "number", inList: true, readOnly: true },
+    { key: "promotedTo", label: "Promoted To", type: "string", inEdit: true },
     { key: "createdAt", label: "Created", type: "datetime", inList: true, sortable: true, readOnly: true },
   ],
 };
@@ -133,6 +175,7 @@ models.set("pipelines", pipelineConfig);
 models.set("approvals", approvalConfig);
 models.set("audit-logs", auditLogConfig);
 models.set("system-config", systemConfigConfig);
+models.set("knowledge", knowledgeConfig);
 
 // ─── Registry API ──────────────────────────────────────────────────────────────
 
@@ -157,6 +200,7 @@ function getPrismaDelegate(slug: string): string | null {
     approvals: "Approval",
     "audit-logs": "AuditLog",
     "system-config": "SystemConfig",
+    knowledge: "KnowledgeEntry",
   };
   return map[slug] ?? null;
 }
@@ -184,6 +228,15 @@ export async function listRecords(
     where.OR = config.searchableFields.map((field) => ({
       [field]: { contains: params.search, mode: "insensitive" },
     }));
+  }
+
+  // Apply filters from params
+  if (params.filters !== undefined) {
+    for (const [field, value] of Object.entries(params.filters)) {
+      if (value !== undefined && value.length > 0) {
+        where[field] = value;
+      }
+    }
   }
 
   // Use dynamic Prisma client access
@@ -302,7 +355,7 @@ export async function deleteRecord(
  * Get record counts for each model (admin dashboard overview).
  */
 export async function getModelCounts(): Promise<Record<string, number>> {
-  const [users, projects, agents, pipelines, approvals, auditLogs, systemConfig] =
+  const [users, projects, agents, pipelines, approvals, auditLogs, systemConfig, knowledge] =
     await Promise.all([
       prisma.user.count(),
       prisma.project.count(),
@@ -311,7 +364,17 @@ export async function getModelCounts(): Promise<Record<string, number>> {
       prisma.approval.count(),
       prisma.auditLog.count(),
       prisma.systemConfig.count(),
+      prisma.knowledgeEntry.count(),
     ]);
 
-  return { users, projects, agents, pipelines, approvals, "audit-logs": auditLogs, "system-config": systemConfig };
+  return {
+    users,
+    projects,
+    agents,
+    pipelines,
+    approvals,
+    "audit-logs": auditLogs,
+    "system-config": systemConfig,
+    knowledge,
+  };
 }

@@ -7,6 +7,7 @@ import type { ExecutionRequest } from "./execution/types";
 import { getEnv } from "@/server/config/env";
 import { prisma } from "@/server/db/client";
 import { createAgentLogger } from "@/lib/logger";
+import { getConfigValue } from "@/server/services/system-config.service";
 
 const logger = createAgentLogger("orchestrator-project");
 
@@ -88,6 +89,8 @@ export class AgentRunner {
       }
 
       // Build execution request
+      const timeoutMs = await getConfigValue<number>("taskTimeoutMs");
+
       const request: ExecutionRequest = {
         taskId: assignment.id,
         agentId: targetAgent,
@@ -99,7 +102,7 @@ export class AgentRunner {
         domainPaths: agentConfig.ownedPaths,
         systemPrompt,
         model: agentConfig.preferredModel ?? undefined,
-        timeoutMs: 600_000,
+        timeoutMs,
       };
 
       // Execute via the configured executor (mock, claude, or openclaw)

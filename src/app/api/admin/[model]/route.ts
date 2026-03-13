@@ -31,15 +31,32 @@ export async function GET(
     }
 
     const searchParams = request.nextUrl.searchParams;
+
+    // Extract filter.* query params
+    const filters: Record<string, string> = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (key.startsWith("filter.") && value.length > 0) {
+        filters[key.slice(7)] = value;
+      }
+    }
+
     const result = await listRecords(model, {
       page: Math.max(1, parseInt(searchParams.get("page") ?? "1", 10)),
       limit: Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "25", 10))),
       sort: searchParams.get("sort") ?? undefined,
       direction: (searchParams.get("direction") ?? undefined) as "asc" | "desc" | undefined,
       search: searchParams.get("search") ?? undefined,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
     });
 
-    return NextResponse.json(successResponse(result), { status: 200 });
+    const configMeta = {
+      allowCreate: config.allowCreate ?? false,
+      allowEdit: config.allowEdit ?? false,
+      allowDelete: config.allowDelete ?? false,
+      columns: config.columns,
+    };
+
+    return NextResponse.json(successResponse({ ...result, config: configMeta }), { status: 200 });
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return NextResponse.json(errorResponse("AUTHENTICATION_ERROR", error.message), { status: 401 });

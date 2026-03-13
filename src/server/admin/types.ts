@@ -44,6 +44,12 @@ export interface ModelConfig {
   defaultSort: { field: string; direction: "asc" | "desc" };
   /** Fields to search in when using the search bar */
   searchableFields: string[];
+  /** Whether admins can create new records */
+  allowCreate?: boolean;
+  /** Whether admins can edit existing records */
+  allowEdit?: boolean;
+  /** Whether admins can delete records */
+  allowDelete?: boolean;
   /** Optional Zod schema for create validation */
   createSchema?: z.ZodType;
   /** Optional Zod schema for edit validation */
@@ -56,6 +62,7 @@ export interface ListParams {
   sort?: string;
   direction?: "asc" | "desc";
   search?: string;
+  filters?: Record<string, string>;
 }
 
 export interface ListResult<T> {

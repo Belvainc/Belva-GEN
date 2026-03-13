@@ -39,7 +39,14 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(successResponse(record), { status: 200 });
+    const configMeta = {
+      allowCreate: config.allowCreate ?? false,
+      allowEdit: config.allowEdit ?? false,
+      allowDelete: config.allowDelete ?? false,
+      columns: config.columns,
+    };
+
+    return NextResponse.json(successResponse({ record, config: configMeta }), { status: 200 });
   } catch (error) {
     if (error instanceof AuthorizationError) {
       return NextResponse.json(errorResponse("AUTHORIZATION_ERROR", error.message), { status: 403 });

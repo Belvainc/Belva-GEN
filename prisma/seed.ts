@@ -66,6 +66,30 @@ async function main(): Promise<void> {
 
   console.log("Default project seeded");
 
+  // ─── Assign Admin to Default Project ─────────────────────────────────────
+
+  console.log("Assigning admin to default project...");
+
+  const adminUser = await prisma.user.findUnique({ where: { email } });
+  const defaultProject = await prisma.project.findUnique({ where: { slug: "belva-gen" } });
+
+  if (adminUser !== null && defaultProject !== null) {
+    await prisma.userProject.upsert({
+      where: {
+        userId_projectId: {
+          userId: adminUser.id,
+          projectId: defaultProject.id,
+        },
+      },
+      update: {},
+      create: {
+        userId: adminUser.id,
+        projectId: defaultProject.id,
+      },
+    });
+    console.log("Admin assigned to default project");
+  }
+
   // ─── Seed Agents ──────────────────────────────────────────────────────────
 
   console.log("Seeding agents...");
@@ -128,6 +152,7 @@ async function main(): Promise<void> {
       },
       ownedPaths: [
         "src/app/dashboard/**",
+        "src/app/admin/**",
         "src/components/**",
       ],
       preferredModel: "claude-sonnet-4-6",
@@ -189,6 +214,8 @@ async function main(): Promise<void> {
     { key: "approvalTimeoutMs", value: 24 * 60 * 60 * 1000 },
     { key: "maxRevisionCycles", value: 3 },
     { key: "maxConcurrentTasksPerEpic", value: 3 },
+    { key: "enableSlackNotifications", value: true },
+    { key: "taskTimeoutMs", value: 600_000 },
   ];
 
   for (const config of configDefaults) {

@@ -4,8 +4,26 @@ import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Text } from "@/components/atoms/Text";
 import { Input } from "@/components/atoms/Input/Input";
+import { Select } from "@/components/atoms/Select";
 import { DataTable, type DataTableColumn } from "@/components/organisms/DataTable";
 import Link from "next/link";
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  type: string;
+  sortable?: boolean;
+  filterable?: boolean;
+  enumValues?: string[];
+  inList?: boolean;
+}
+
+interface ConfigMeta {
+  allowCreate: boolean;
+  allowEdit: boolean;
+  allowDelete: boolean;
+  columns: ColumnDef[];
+}
 
 interface ListResponse {
   data: Record<string, unknown>[];
@@ -13,6 +31,7 @@ interface ListResponse {
   page: number;
   limit: number;
   totalPages: number;
+  config: ConfigMeta;
 }
 
 export default function AdminModelListPage(): ReactNode {
@@ -26,6 +45,7 @@ export default function AdminModelListPage(): ReactNode {
   const [sort, setSort] = useState<string | undefined>();
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -40,6 +60,11 @@ export default function AdminModelListPage(): ReactNode {
       if (search.length > 0) {
         searchParams.set("search", search);
       }
+      for (const [key, value] of Object.entries(filters)) {
+        if (value.length > 0) {
+          searchParams.set(`filter.${key}`, value);
+        }
+      }
 
       const res = await fetch(`/api/admin/${model}?${searchParams.toString()}`);
       const json = (await res.json()) as { success: boolean; data: ListResponse };
@@ -49,27 +74,25 @@ export default function AdminModelListPage(): ReactNode {
     } finally {
       setLoading(false);
     }
-  }, [model, page, sort, direction, search]);
+  }, [model, page, sort, direction, search, filters]);
 
-  // Fetch model config (from the API response columns)
   useEffect(() => {
-    // We'll derive config from the first API call metadata
-    // For now, hardcode a fetch to get the data
     fetchData();
   }, [fetchData]);
 
-  // Derive columns from the first data response
-  const columns: DataTableColumn[] =
-    data !== null && data.data.length > 0
-      ? Object.keys(data.data[0] ?? {})
-          .filter((k) => !["passwordHash", "capabilities", "taskGraph", "payload", "metadata"].includes(k))
-          .slice(0, 7) // Show max 7 columns in list
-          .map((key) => ({
-            key,
-            label: key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
-            sortable: ["createdAt", "updatedAt", "name", "email", "status", "role", "action"].includes(key),
-          }))
-      : [];
+  // Derive columns from config
+  const configColumns = data?.config?.columns ?? [];
+  const listColumns = configColumns.filter((c) => c.inList === true);
+  const columns: DataTableColumn[] = listColumns.map((col) => ({
+    key: col.key,
+    label: col.label,
+    sortable: col.sortable ?? false,
+  }));
+
+  // Get filterable columns with enum values
+  const filterableColumns = configColumns.filter(
+    (c) => c.filterable === true && c.enumValues !== undefined && c.enumValues.length > 0
+  );
 
   function handleSort(field: string): void {
     if (sort === field) {
@@ -81,7 +104,16 @@ export default function AdminModelListPage(): ReactNode {
     setPage(1);
   }
 
-  const modelName = model.replace(/-/g, " ").replace(/^./, (s) => s.toUpperCase());
+  function handleFilterChange(field: string, value: string): void {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+    setPage(1);
+  }
+
+  const modelName = data?.config
+    ? (listColumns.length > 0 ? model : model).replace(/-/g, " ").replace(/^./, (s) => s.toUpperCase())
+    : model.replace(/-/g, " ").replace(/^./, (s) => s.toUpperCase());
+
+  const allowCreate = data?.config?.allowCreate ?? false;
 
   return (
     <div>
@@ -89,7 +121,7 @@ export default function AdminModelListPage(): ReactNode {
         <Text variant="h2" as="h2">
           {modelName}
         </Text>
-        {!["audit-logs", "approvals"].includes(model) && (
+        {allowCreate && (
           <Link
             href={`/admin/${model}/new`}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -99,16 +131,30 @@ export default function AdminModelListPage(): ReactNode {
         )}
       </div>
 
-      <div className="mb-4">
-        <Input
-          type="search"
-          placeholder={`Search ${modelName.toLowerCase()}...`}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-        />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex-1">
+          <Input
+            type="search"
+            placeholder={`Search ${modelName.toLowerCase()}...`}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        {filterableColumns.map((col) => (
+          <div key={col.key} className="w-44">
+            <Select
+              options={[
+                { value: "", label: `All ${col.label}` },
+                ...(col.enumValues ?? []).map((v) => ({ value: v, label: v })),
+              ]}
+              value={filters[col.key] ?? ""}
+              onChange={(e) => handleFilterChange(col.key, e.target.value)}
+            />
+          </div>
+        ))}
       </div>
 
       {loading && data === null ? (

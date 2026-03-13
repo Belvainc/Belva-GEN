@@ -44,6 +44,29 @@ const MODEL_FIELDS: Record<
     { key: "confluenceSpaceKey", label: "Confluence Space Key", type: "text" },
     { key: "githubRepo", label: "GitHub Repo", type: "text", placeholder: "owner/repo" },
   ],
+  "system-config": [
+    { key: "key", label: "Config Key", type: "text", required: true, placeholder: "e.g. approvalTimeoutMs, enableSlackNotifications, taskTimeoutMs" },
+    { key: "value", label: "Value (JSON)", type: "textarea", required: true, placeholder: '{"setting": "value"} or a raw number/string' },
+    { key: "updatedBy", label: "Updated By", type: "text", placeholder: "admin@example.com" },
+  ],
+  knowledge: [
+    { key: "title", label: "Title", type: "text", required: true },
+    {
+      key: "category",
+      label: "Category",
+      type: "select",
+      required: true,
+      options: [
+        { value: "PATTERN", label: "Pattern" },
+        { value: "GOTCHA", label: "Gotcha" },
+        { value: "DECISION", label: "Decision" },
+        { value: "OPTIMIZATION", label: "Optimization" },
+      ],
+    },
+    { key: "content", label: "Content", type: "textarea", required: true },
+    { key: "sourceTicketRef", label: "Source Ticket", type: "text", placeholder: "BELVA-123" },
+    { key: "confidence", label: "Confidence", type: "text", placeholder: "0.0 - 1.0" },
+  ],
 };
 
 export default function AdminModelCreatePage(): ReactNode {

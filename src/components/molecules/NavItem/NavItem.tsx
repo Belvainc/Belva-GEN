@@ -10,12 +10,15 @@ import {
   GitBranch,
   BookOpen,
   Settings,
+  Activity,
+  Database,
+  Key,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/atoms/Badge";
 
-type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder" | "book-open" | "settings";
+type IconName = "home" | "bot" | "check-circle" | "git-branch" | "shield" | "folder" | "book-open" | "settings" | "activity" | "database" | "key";
 
 interface NavItemProps {
   /** Navigation label */
@@ -39,6 +42,9 @@ const iconMap: Record<IconName, LucideIcon> = {
   folder: Folder,
   "book-open": BookOpen,
   settings: Settings,
+  activity: Activity,
+  database: Database,
+  key: Key,
 } as const;
 
 /**

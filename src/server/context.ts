@@ -30,15 +30,17 @@ async function loadOrchestratorConfig(): Promise<{
   approvalTimeoutMs: number;
   maxRevisionCycles: number;
   maxConcurrentTasksPerEpic: number;
+  enableSlackNotifications: boolean;
 }> {
   try {
-    const [approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic] =
+    const [approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic, enableSlackNotifications] =
       await Promise.all([
         getConfigValue<number>("approvalTimeoutMs"),
         getConfigValue<number>("maxRevisionCycles"),
         getConfigValue<number>("maxConcurrentTasksPerEpic"),
+        getConfigValue<boolean>("enableSlackNotifications"),
       ]);
-    return { approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic };
+    return { approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic, enableSlackNotifications };
   } catch (error) {
     logger.warn(
       { error },
@@ -49,6 +51,7 @@ async function loadOrchestratorConfig(): Promise<{
       approvalTimeoutMs: 24 * 60 * 60 * 1000,
       maxRevisionCycles: 3,
       maxConcurrentTasksPerEpic: env.NODE_ENV === "production" ? 3 : 2,
+      enableSlackNotifications: true,
     };
   }
 }
@@ -57,6 +60,7 @@ function createServerContext(config: {
   approvalTimeoutMs: number;
   maxRevisionCycles: number;
   maxConcurrentTasksPerEpic: number;
+  enableSlackNotifications: boolean;
 }): ServerContext {
   const messageBus = new MessageBus();
   const registry = new AgentRegistry();
@@ -80,6 +84,7 @@ export function getServerContext(): ServerContext {
       approvalTimeoutMs: 24 * 60 * 60 * 1000,
       maxRevisionCycles: 3,
       maxConcurrentTasksPerEpic: env.NODE_ENV === "production" ? 3 : 2,
+      enableSlackNotifications: true,
     });
   }
   return _context;

@@ -16,6 +16,8 @@ export const SystemConfigKeySchema = z.enum([
   "approvalTimeoutMs",
   "maxRevisionCycles",
   "maxConcurrentTasksPerEpic",
+  "enableSlackNotifications",
+  "taskTimeoutMs",
 ]);
 export type SystemConfigKey = z.infer<typeof SystemConfigKeySchema>;
 
@@ -24,6 +26,8 @@ const DEFAULTS: Record<SystemConfigKey, unknown> = {
   approvalTimeoutMs: 24 * 60 * 60 * 1000, // 24 hours
   maxRevisionCycles: 3,
   maxConcurrentTasksPerEpic: 3,
+  enableSlackNotifications: true,
+  taskTimeoutMs: 600_000, // 10 minutes
 };
 
 // ─── Read ───────────────────────────────────────────────────────────────────
