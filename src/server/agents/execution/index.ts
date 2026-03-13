@@ -1,6 +1,7 @@
 import type { AgentExecutor } from "./types";
 import { MockAgentExecutor } from "./mock-executor";
 import { ClaudeCodeExecutor } from "./claude-executor";
+import { OpenClawExecutor } from "./openclaw-executor";
 import { getEnv } from "@/server/config/env";
 import { createChildLogger } from "@/server/config/logger";
 
@@ -16,8 +17,8 @@ let executor: AgentExecutor | undefined;
  * Get the configured AgentExecutor singleton.
  * Selection is controlled by `AGENT_EXECUTOR` env var:
  * - "mock" (default): MockAgentExecutor — no external calls
- * - "claude": ClaudeCodeExecutor — Anthropic API
- * - "openclaw": reserved for future OpenClaw integration
+ * - "claude": ClaudeCodeExecutor — Anthropic API (prompt-only, no tools)
+ * - "openclaw": OpenClawExecutor — OpenClaw Gateway (full MCP tool access)
  */
 export function getExecutor(): AgentExecutor {
   if (executor === undefined) {
@@ -31,9 +32,7 @@ export function getExecutor(): AgentExecutor {
         executor = new ClaudeCodeExecutor();
         break;
       case "openclaw":
-        // Future: OpenClawExecutor
-        logger.warn("OpenClaw executor not yet implemented, falling back to mock");
-        executor = new MockAgentExecutor();
+        executor = new OpenClawExecutor();
         break;
     }
 

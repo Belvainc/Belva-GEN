@@ -3,6 +3,12 @@ import { z } from "zod";
 // ─── Agent Identifiers ────────────────────────────────────────────────────────
 
 export const AgentIdSchema = z.enum([
+  // Role-based IDs (OpenClaw agents)
+  "orchestrator",
+  "backend",
+  "frontend",
+  "testing",
+  // Legacy IDs (kept for backward compatibility with existing data)
   "orchestrator-project",
   "node-backend",
   "next-ux",

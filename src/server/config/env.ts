@@ -62,8 +62,8 @@ const envSchema = z.object({
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_REPO: z.string().optional(), // format: "owner/repo"
 
-  // OpenClaw (future)
-  OPENCLAW_ENDPOINT: z.string().url().optional(),
+  // OpenClaw Gateway
+  OPENCLAW_ENDPOINT: z.string().url().default("http://localhost:3100"),
   OPENCLAW_API_KEY: z.string().optional(),
 
   // Authentication

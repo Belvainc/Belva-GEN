@@ -14,6 +14,7 @@ export const ExecutionRequestSchema = z.object({
   acceptanceCriteria: z.array(z.string()),
   domainPaths: z.array(z.string()),
   systemPrompt: z.string().min(1),
+  model: z.string().optional(), // Override model for this execution
   priorResults: z.array(z.string()).optional(),
   timeoutMs: z.number().int().positive().default(600_000),
 });

@@ -30,6 +30,7 @@ jest.mock("@/server/db/client", () => ({
     pipeline: makeMockDelegate(),
     approval: makeMockDelegate(),
     auditLog: makeMockDelegate(),
+    systemConfig: makeMockDelegate(),
   },
 }));
 
@@ -53,7 +54,7 @@ describe("admin model registry", () => {
     });
 
     it("has configs for all expected models", () => {
-      const slugs = ["users", "projects", "agents", "pipelines", "approvals", "audit-logs"];
+      const slugs = ["users", "projects", "agents", "pipelines", "approvals", "audit-logs", "system-config"];
       for (const slug of slugs) {
         expect(getModelConfig(slug)).toBeDefined();
       }
@@ -61,9 +62,9 @@ describe("admin model registry", () => {
   });
 
   describe("getAllModelConfigs", () => {
-    it("returns all 6 registered model configs", () => {
+    it("returns all 7 registered model configs", () => {
       const configs = getAllModelConfigs();
-      expect(configs).toHaveLength(6);
+      expect(configs).toHaveLength(7);
 
       const slugs = configs.map((c) => c.slug);
       expect(slugs).toContain("users");
@@ -230,6 +231,7 @@ describe("admin model registry", () => {
       (prisma.pipeline.count as jest.Mock).mockResolvedValue(1);
       (prisma.approval.count as jest.Mock).mockResolvedValue(10);
       (prisma.auditLog.count as jest.Mock).mockResolvedValue(100);
+      (prisma.systemConfig.count as jest.Mock).mockResolvedValue(3);
 
       const counts = await getModelCounts();
 
@@ -239,6 +241,7 @@ describe("admin model registry", () => {
       expect(counts.pipelines).toBe(1);
       expect(counts.approvals).toBe(10);
       expect(counts["audit-logs"]).toBe(100);
+      expect(counts["system-config"]).toBe(3);
     });
   });
 });

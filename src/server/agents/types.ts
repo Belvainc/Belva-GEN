@@ -32,7 +32,9 @@ export const AgentConfigSchema = z.object({
   agentId: AgentIdSchema,
   name: z.string().min(1),
   description: z.string().min(1),
+  role: z.string().default(""), // Maps to openclaw/agents/<role>.md in project repo
   capabilities: AgentCapabilitySchema,
   ownedPaths: z.array(z.string()),
+  preferredModel: z.string().nullish(), // e.g. "claude-sonnet-4-6", overrides system default
 });
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

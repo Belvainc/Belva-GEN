@@ -2,8 +2,10 @@ import type { TaskAssignment, TaskCompletion } from "@/types/agent-protocol";
 import type { AgentRegistry } from "./registry";
 import type { MessageBus } from "./message-bus";
 import { getExecutor } from "./execution";
-import { composeSystemPrompt } from "./execution/prompt-composer";
+import { composeSystemPrompt, composeOpenClawPrompt } from "./execution/prompt-composer";
 import type { ExecutionRequest } from "./execution/types";
+import { getEnv } from "@/server/config/env";
+import { prisma } from "@/server/db/client";
 import { createAgentLogger } from "@/lib/logger";
 
 const logger = createAgentLogger("orchestrator-project");
@@ -64,13 +66,26 @@ export class AgentRunner {
     );
 
     const executor = getExecutor();
+    const executorType = getEnv().AGENT_EXECUTOR;
 
     try {
-      // Compose system prompt from agent definition + applicable rules
-      const systemPrompt = await composeSystemPrompt(
-        targetAgent,
-        agentConfig.ownedPaths
-      );
+      // Compose system prompt based on executor type
+      let systemPrompt: string;
+
+      if (executorType === "openclaw" && agentConfig.role) {
+        // OpenClaw: load from project repo's openclaw/agents/<role>.md + SOUL.md
+        const repoPath = await this.resolveRepoPath(ticketRef);
+        systemPrompt = await composeOpenClawPrompt(
+          agentConfig.role,
+          repoPath
+        );
+      } else {
+        // Legacy: load from .claude/agents/<agentId>.md + .claude/rules/
+        systemPrompt = await composeSystemPrompt(
+          targetAgent,
+          agentConfig.ownedPaths
+        );
+      }
 
       // Build execution request
       const request: ExecutionRequest = {
@@ -83,6 +98,7 @@ export class AgentRunner {
         acceptanceCriteria: assignment.acceptanceCriteria,
         domainPaths: agentConfig.ownedPaths,
         systemPrompt,
+        model: agentConfig.preferredModel ?? undefined,
         timeoutMs: 600_000,
       };
 
@@ -129,6 +145,28 @@ export class AgentRunner {
         currentTask: null,
       });
     }
+  }
+
+  /**
+   * Resolve the repo path for a ticket by looking up its pipeline's project.
+   * Falls back to current working directory if not found.
+   */
+  private async resolveRepoPath(ticketRef: string): Promise<string> {
+    try {
+      const pipeline = await prisma.pipeline.findUnique({
+        where: { epicKey: ticketRef },
+        include: { project: true },
+      });
+
+      if (pipeline?.project?.repoPath) {
+        return pipeline.project.repoPath;
+      }
+    } catch {
+      logger.warn(`Failed to resolve repo path from pipeline for ${ticketRef}`);
+    }
+
+    // Fallback to current project
+    return process.cwd();
   }
 
   /**

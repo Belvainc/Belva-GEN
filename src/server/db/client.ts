@@ -36,7 +36,7 @@ function createPrismaClient(): PrismaClient {
 function isCachedClientCurrent(client: PrismaClient): boolean {
   // Verify a recently-added model exists on the client.
   // Update this check when adding new models to the schema.
-  return "knowledgeEntry" in client && "patternExtraction" in client;
+  return "knowledgeEntry" in client && "patternExtraction" in client && "systemConfig" in client;
 }
 
 function getOrCreatePrismaClient(): PrismaClient {

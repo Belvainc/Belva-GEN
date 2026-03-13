@@ -1,0 +1,99 @@
+{
+  "$schema": "https://docs.openclaw.ai/schemas/openclaw.json",
+  "gateway": {
+    "port": 3100,
+    "reload": {
+      "mode": "hybrid",
+      "debounceMs": 300
+    }
+  },
+  "agents": {
+    "defaults": {
+      "temperature": 0.3,
+      "bootstrapMaxChars": 20000
+    },
+    "list": {
+      "orchestrator": {
+        "model": "claude-opus-4-6",
+        "description": "Project orchestrator — Jira lifecycle, task decomposition, HITL governance",
+        "mcp": {
+          "servers": {
+            "jira": {
+              "command": "mcp-atlassian",
+              "args": ["--transport", "stdio"],
+              "env": {
+                "JIRA_URL": "${JIRA_BASE_URL}",
+                "JIRA_USER_EMAIL": "${JIRA_USER_EMAIL}",
+                "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+              }
+            },
+            "slack": {
+              "command": "mcp-slack",
+              "args": ["--transport", "stdio"],
+              "env": {
+                "SLACK_WEBHOOK_URL": "${SLACK_WEBHOOK_URL}"
+              }
+            }
+          }
+        }
+      },
+      "backend": {
+        "model": "claude-sonnet-4-6",
+        "description": "Backend engineer — Node.js/TypeScript, Prisma, BullMQ, APIs",
+        "mcp": {
+          "servers": {
+            "github": {
+              "command": "mcp-github",
+              "args": ["--transport", "stdio"],
+              "env": {
+                "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+              }
+            },
+            "filesystem": {
+              "command": "mcp-filesystem",
+              "args": ["--transport", "stdio", "--allowed-paths", "${REPO_PATH}/src/server,${REPO_PATH}/src/app/api,${REPO_PATH}/src/types,${REPO_PATH}/prisma"]
+            }
+          }
+        }
+      },
+      "frontend": {
+        "model": "claude-sonnet-4-6",
+        "description": "Frontend engineer — Next.js, React, Tailwind, dashboard UI",
+        "mcp": {
+          "servers": {
+            "github": {
+              "command": "mcp-github",
+              "args": ["--transport", "stdio"],
+              "env": {
+                "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+              }
+            },
+            "filesystem": {
+              "command": "mcp-filesystem",
+              "args": ["--transport", "stdio", "--allowed-paths", "${REPO_PATH}/src/app/dashboard,${REPO_PATH}/src/components"]
+            }
+          }
+        }
+      },
+      "qa": {
+        "model": "claude-sonnet-4-6",
+        "description": "QA engineer — Jest, Playwright, coverage, performance budgets",
+        "mcp": {
+          "servers": {
+            "github": {
+              "command": "mcp-github",
+              "args": ["--transport", "stdio"],
+              "env": {
+                "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+              }
+            },
+            "filesystem": {
+              "command": "mcp-filesystem",
+              "args": ["--transport", "stdio", "--allowed-paths", "${REPO_PATH}"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

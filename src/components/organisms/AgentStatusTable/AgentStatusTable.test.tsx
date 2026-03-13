@@ -11,6 +11,7 @@ const mockAgents: AgentWithStatus[] = [
       agentId: "node-backend",
       name: "Node Backend Agent",
       description: "Handles backend tasks",
+      role: "backend",
       capabilities: {
         taskTypes: ["backend"],
         maxConcurrentTasks: 1,
@@ -30,6 +31,7 @@ const mockAgents: AgentWithStatus[] = [
       agentId: "next-ux",
       name: "Next.js UX Agent",
       description: "Handles frontend tasks",
+      role: "frontend",
       capabilities: {
         taskTypes: ["frontend"],
         maxConcurrentTasks: 1,

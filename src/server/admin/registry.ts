@@ -52,9 +52,27 @@ const agentConfig: ModelConfig = {
   columns: [
     { key: "id", label: "ID", type: "string", inList: true, readOnly: true },
     { key: "name", label: "Name", type: "string", inList: true, sortable: true, searchable: true },
+    { key: "role", label: "Role", type: "string", inList: true, sortable: true },
     { key: "status", label: "Status", type: "enum", enumValues: ["IDLE", "BUSY", "ERROR", "OFFLINE"], inList: true, sortable: true, filterable: true },
+    { key: "preferredModel", label: "Model", type: "string", inList: true, inEdit: true },
+    { key: "isActive", label: "Active", type: "boolean", inList: true, filterable: true, inEdit: true },
     { key: "currentTask", label: "Current Task", type: "string", inList: true },
     { key: "lastHeartbeat", label: "Last Heartbeat", type: "datetime", inList: true, sortable: true, readOnly: true },
+  ],
+};
+
+const systemConfigConfig: ModelConfig = {
+  name: "SystemConfig",
+  pluralName: "System Config",
+  slug: "system-config",
+  defaultSort: { field: "updatedAt", direction: "desc" },
+  searchableFields: ["key"],
+  columns: [
+    { key: "id", label: "ID", type: "uuid", inList: false, readOnly: true },
+    { key: "key", label: "Key", type: "string", inList: true, sortable: true, searchable: true, inCreate: true },
+    { key: "value", label: "Value", type: "json", inList: true, inCreate: true, inEdit: true },
+    { key: "updatedBy", label: "Updated By", type: "string", inList: true },
+    { key: "updatedAt", label: "Updated", type: "datetime", inList: true, sortable: true, readOnly: true },
   ],
 };
 
@@ -114,6 +132,7 @@ models.set("agents", agentConfig);
 models.set("pipelines", pipelineConfig);
 models.set("approvals", approvalConfig);
 models.set("audit-logs", auditLogConfig);
+models.set("system-config", systemConfigConfig);
 
 // ─── Registry API ──────────────────────────────────────────────────────────────
 
@@ -137,6 +156,7 @@ function getPrismaDelegate(slug: string): string | null {
     pipelines: "Pipeline",
     approvals: "Approval",
     "audit-logs": "AuditLog",
+    "system-config": "SystemConfig",
   };
   return map[slug] ?? null;
 }
@@ -282,7 +302,7 @@ export async function deleteRecord(
  * Get record counts for each model (admin dashboard overview).
  */
 export async function getModelCounts(): Promise<Record<string, number>> {
-  const [users, projects, agents, pipelines, approvals, auditLogs] =
+  const [users, projects, agents, pipelines, approvals, auditLogs, systemConfig] =
     await Promise.all([
       prisma.user.count(),
       prisma.project.count(),
@@ -290,7 +310,8 @@ export async function getModelCounts(): Promise<Record<string, number>> {
       prisma.pipeline.count(),
       prisma.approval.count(),
       prisma.auditLog.count(),
+      prisma.systemConfig.count(),
     ]);
 
-  return { users, projects, agents, pipelines, approvals, "audit-logs": auditLogs };
+  return { users, projects, agents, pipelines, approvals, "audit-logs": auditLogs, "system-config": systemConfig };
 }

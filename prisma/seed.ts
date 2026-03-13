@@ -44,6 +44,165 @@ async function main(): Promise<void> {
   });
 
   console.log("Admin user seeded successfully");
+
+  // ─── Seed Project ─────────────────────────────────────────────────────────
+
+  console.log("Seeding default project...");
+
+  await prisma.project.upsert({
+    where: { slug: "belva-gen" },
+    update: {
+      repoPath: process.cwd(),
+    },
+    create: {
+      name: "Belva-GEN",
+      slug: "belva-gen",
+      description: "Autonomous development framework with HITL governance",
+      jiraProjectKey: "BELVA",
+      githubRepo: "belva/belva-gen",
+      repoPath: process.cwd(),
+    },
+  });
+
+  console.log("Default project seeded");
+
+  // ─── Seed Agents ──────────────────────────────────────────────────────────
+
+  console.log("Seeding agents...");
+
+  const agents = [
+    {
+      id: "orchestrator",
+      name: "Project Orchestrator",
+      description: "Epic lifecycle, task decomposition, HITL governance",
+      role: "orchestrator",
+      capabilities: {
+        taskTypes: ["orchestration"],
+        maxConcurrentTasks: 1,
+        ruleReferences: ["git-safety.md", "mcp-safety.md"],
+      },
+      ownedPaths: [] as string[],
+      preferredModel: "claude-opus-4-6",
+    },
+    {
+      id: "backend",
+      name: "Backend Engineer",
+      description: "Node.js/TypeScript, APIs, database, queues, MCP integrations",
+      role: "backend",
+      capabilities: {
+        taskTypes: ["backend"],
+        maxConcurrentTasks: 1,
+        ruleReferences: [
+          "ts-strict-mode.md",
+          "git-safety.md",
+          "service-layer.md",
+          "async-concurrency.md",
+          "infrastructure.md",
+        ],
+      },
+      ownedPaths: [
+        "src/server/**",
+        "src/app/api/**",
+        "src/types/**",
+        "src/lib/**",
+        "prisma/**",
+      ],
+      preferredModel: "claude-sonnet-4-6",
+    },
+    {
+      id: "frontend",
+      name: "Frontend Engineer",
+      description: "Next.js, React, Tailwind, dashboard UI",
+      role: "frontend",
+      capabilities: {
+        taskTypes: ["frontend"],
+        maxConcurrentTasks: 1,
+        ruleReferences: [
+          "ts-strict-mode.md",
+          "git-safety.md",
+          "component-architecture.md",
+          "accessibility.md",
+          "frontend-performance.md",
+          "data-fetching.md",
+        ],
+      },
+      ownedPaths: [
+        "src/app/dashboard/**",
+        "src/components/**",
+      ],
+      preferredModel: "claude-sonnet-4-6",
+    },
+    {
+      id: "testing",
+      name: "QA Engineer",
+      description: "Jest, Playwright, coverage, performance budgets",
+      role: "testing",
+      capabilities: {
+        taskTypes: ["testing"],
+        maxConcurrentTasks: 1,
+        ruleReferences: [
+          "ts-strict-mode.md",
+          "git-safety.md",
+          "testing-budgets.md",
+        ],
+      },
+      ownedPaths: [
+        "__tests__/**",
+        "e2e/**",
+      ],
+      preferredModel: "claude-sonnet-4-6",
+    },
+  ];
+
+  for (const agent of agents) {
+    await prisma.agent.upsert({
+      where: { id: agent.id },
+      update: {
+        name: agent.name,
+        description: agent.description,
+        role: agent.role,
+        capabilities: agent.capabilities,
+        ownedPaths: agent.ownedPaths,
+        preferredModel: agent.preferredModel,
+        isActive: true,
+      },
+      create: {
+        id: agent.id,
+        name: agent.name,
+        description: agent.description,
+        role: agent.role,
+        capabilities: agent.capabilities,
+        ownedPaths: agent.ownedPaths,
+        preferredModel: agent.preferredModel,
+        isActive: true,
+      },
+    });
+  }
+
+  console.log(`${agents.length} agents seeded`);
+
+  // ─── Seed System Config ───────────────────────────────────────────────────
+
+  console.log("Seeding system config defaults...");
+
+  const configDefaults: Array<{ key: string; value: unknown }> = [
+    { key: "approvalTimeoutMs", value: 24 * 60 * 60 * 1000 },
+    { key: "maxRevisionCycles", value: 3 },
+    { key: "maxConcurrentTasksPerEpic", value: 3 },
+  ];
+
+  for (const config of configDefaults) {
+    await prisma.systemConfig.upsert({
+      where: { key: config.key },
+      update: {},
+      create: {
+        key: config.key,
+        value: config.value as never,
+      },
+    });
+  }
+
+  console.log("System config defaults seeded");
 }
 
 main()

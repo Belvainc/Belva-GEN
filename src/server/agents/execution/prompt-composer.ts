@@ -9,7 +9,7 @@ const logger = createChildLogger({ module: "prompt-composer" });
 // Agent definitions and rules are in the project root.
 
 const PROJECT_ROOT = resolve(process.cwd());
-const AGENTS_DIR = join(PROJECT_ROOT, ".claude", "agents");
+const CLAUDE_AGENTS_DIR = join(PROJECT_ROOT, ".claude", "agents");
 const RULES_DIR = join(PROJECT_ROOT, ".claude", "rules");
 
 // ─── Rule Path Matchers ─────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ interface RuleFile {
  * 1. The agent's definition from `.claude/agents/<agentId>.md`
  * 2. Applicable rules from `.claude/rules/*.md` based on domain paths
  *
- * This matches how Claude Code agents work — agent file + relevant rules.
+ * This is the legacy composition path used by ClaudeCodeExecutor.
  */
 export async function composeSystemPrompt(
   agentId: AgentId,
@@ -58,22 +58,70 @@ export async function composeSystemPrompt(
 
   logger.info(
     { agentId, ruleCount: applicableRules.length },
-    "System prompt composed"
+    "System prompt composed (legacy)"
   );
 
   return sections.join("\n");
 }
 
 /**
- * Read an agent definition file.
+ * Compose a system prompt for an OpenClaw agent by combining:
+ * 1. The agent's role definition from `{repoPath}/openclaw/agents/{role}.md`
+ * 2. Project-wide constraints from `{repoPath}/openclaw/SOUL.md`
+ *
+ * This is the new composition path for OpenClawExecutor.
+ * Agent definitions are loaded dynamically from the target project's repo.
  */
-async function readAgentDefinition(agentId: AgentId): Promise<string | null> {
-  const filePath = join(AGENTS_DIR, `${agentId}.md`);
+export async function composeOpenClawPrompt(
+  role: string,
+  repoPath: string
+): Promise<string> {
+  const sections: string[] = [];
+
+  // 1. Read role definition from project repo
+  const agentDef = await readFileOrNull(
+    join(repoPath, "openclaw", "agents", `${role}.md`)
+  );
+  if (agentDef) {
+    sections.push(agentDef);
+  } else {
+    logger.warn(
+      { role, repoPath },
+      "OpenClaw agent definition not found, using role as fallback"
+    );
+    sections.push(`You are the ${role} agent.`);
+  }
+
+  // 2. Read SOUL.md (project-wide constraints)
+  const soul = await readFileOrNull(join(repoPath, "openclaw", "SOUL.md"));
+  if (soul) {
+    sections.push("\n---\n");
+    sections.push(soul);
+  }
+
+  logger.info(
+    { role, repoPath, hasSoul: soul !== null },
+    "OpenClaw system prompt composed"
+  );
+
+  return sections.join("\n");
+}
+
+// ─── File Readers ───────────────────────────────────────────────────────────
+
+async function readFileOrNull(filePath: string): Promise<string | null> {
   try {
     return await readFile(filePath, "utf-8");
   } catch {
     return null;
   }
+}
+
+/**
+ * Read an agent definition file from .claude/agents/.
+ */
+async function readAgentDefinition(agentId: AgentId): Promise<string | null> {
+  return readFileOrNull(join(CLAUDE_AGENTS_DIR, `${agentId}.md`));
 }
 
 /**

@@ -5,6 +5,7 @@ import { getJiraMCPClient } from "./mcp/jira";
 import { getSlackNotificationClient } from "./mcp/slack";
 import { getEnv } from "./config/env";
 import { createChildLogger } from "./config/logger";
+import { getConfigValue } from "./services/system-config.service";
 
 const logger = createChildLogger({ module: "server-context" });
 
@@ -21,36 +22,72 @@ export interface ServerContext {
 let _context: ServerContext | undefined;
 let _initialized = false;
 
-function createServerContext(): ServerContext {
-  const env = getEnv();
+/**
+ * Load orchestrator config from SystemConfig (DB + Redis cache).
+ * Falls back to defaults if DB is unavailable.
+ */
+async function loadOrchestratorConfig(): Promise<{
+  approvalTimeoutMs: number;
+  maxRevisionCycles: number;
+  maxConcurrentTasksPerEpic: number;
+}> {
+  try {
+    const [approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic] =
+      await Promise.all([
+        getConfigValue<number>("approvalTimeoutMs"),
+        getConfigValue<number>("maxRevisionCycles"),
+        getConfigValue<number>("maxConcurrentTasksPerEpic"),
+      ]);
+    return { approvalTimeoutMs, maxRevisionCycles, maxConcurrentTasksPerEpic };
+  } catch (error) {
+    logger.warn(
+      { error },
+      "Failed to load system config, using hardcoded defaults"
+    );
+    const env = getEnv();
+    return {
+      approvalTimeoutMs: 24 * 60 * 60 * 1000,
+      maxRevisionCycles: 3,
+      maxConcurrentTasksPerEpic: env.NODE_ENV === "production" ? 3 : 2,
+    };
+  }
+}
+
+function createServerContext(config: {
+  approvalTimeoutMs: number;
+  maxRevisionCycles: number;
+  maxConcurrentTasksPerEpic: number;
+}): ServerContext {
   const messageBus = new MessageBus();
   const registry = new AgentRegistry();
 
-  const engine = new OrchestratorEngine({
-    approvalTimeoutMs: 24 * 60 * 60 * 1000, // 24 hours
-    maxRevisionCycles: 3,
-    maxConcurrentTasksPerEpic: env.NODE_ENV === "production" ? 3 : 2,
-  });
+  const engine = new OrchestratorEngine(config);
 
-  logger.info("Server context created");
+  logger.info(config, "Server context created with system config");
 
   return { engine, registry, messageBus };
 }
 
 /**
  * Get the server context singleton.
- * Creates the context lazily on first access.
+ * Creates the context lazily on first access with default config.
+ * For production use, call initializeServerContext() first.
  */
 export function getServerContext(): ServerContext {
   if (_context === undefined) {
-    _context = createServerContext();
+    const env = getEnv();
+    _context = createServerContext({
+      approvalTimeoutMs: 24 * 60 * 60 * 1000,
+      maxRevisionCycles: 3,
+      maxConcurrentTasksPerEpic: env.NODE_ENV === "production" ? 3 : 2,
+    });
   }
   return _context;
 }
 
 /**
  * Initialize engine dependencies. Call once during server startup.
- * MCP clients may use stubs in dev mode.
+ * Loads system config from DB, then initializes MCP clients.
  */
 export async function initializeServerContext(): Promise<void> {
   if (_initialized) {
@@ -58,7 +95,11 @@ export async function initializeServerContext(): Promise<void> {
     return;
   }
 
-  const ctx = getServerContext();
+  // Load config from DB (or defaults)
+  const config = await loadOrchestratorConfig();
+  _context = createServerContext(config);
+
+  const ctx = _context;
   const jiraClient = getJiraMCPClient();
   const slackClient = getSlackNotificationClient();
 

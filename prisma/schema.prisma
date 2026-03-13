@@ -71,6 +71,7 @@ model Project {
   jiraProjectKey      String?
   confluenceSpaceKey  String?
   githubRepo          String?  // "owner/repo" format
+  repoPath            String?  // Absolute path to repo on disk for agent definition loading
   metadata            Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -126,13 +127,16 @@ enum AgentStatusValue {
 }
 
 model Agent {
-  id              String           @id // e.g. "node-backend", "next-ux"
+  id              String           @id // e.g. "backend", "frontend"
   name            String
   description     String
+  role            String           @default("") // Maps to openclaw/agents/<role>.md
   status          AgentStatusValue @default(IDLE)
   currentTask     String?
   capabilities    Json             // AgentCapability shape
   ownedPaths      String[]
+  preferredModel  String?          // e.g. "claude-sonnet-4-6", overrides system default
+  isActive        Boolean          @default(true)
   lastHeartbeat   DateTime         @default(now())
   projectId       String?
   createdAt       DateTime         @default(now())
@@ -338,4 +342,16 @@ model PatternExtraction {
 
   @@index([pipelineId])
   @@map("pattern_extractions")
+}
+
+// ─── System Configuration ───────────────────────────────────────────────────
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("system_config")
 }
