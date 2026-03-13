@@ -60,7 +60,7 @@ export function AdminDashboardLive(): ReactNode {
     };
   }, [fetchData]);
 
-  const totalFailed = queues?.queues.reduce((sum, q) => sum + q.counts.failed, 0) ?? 0;
+  const totalFailed = queues?.queues?.reduce((sum, q) => sum + q.counts.failed, 0) ?? 0;
 
   return (
     <div className="mb-8 flex flex-wrap gap-4">
